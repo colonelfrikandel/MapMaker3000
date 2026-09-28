@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#131f25" />
     <title>MapMaker 3000 — Atlas of worlds</title>
-    <link rel="stylesheet" href="./styles.css?v=town-base-2" />
+    <link rel="stylesheet" href="./styles.css?v=world-base-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -60,6 +60,10 @@
         <div id="inspector-form" class="inspector-form" hidden>
           <label>NAME<input id="place-name" type="text" maxlength="80" placeholder="Name this place" /></label>
           <label>KIND<select id="place-type"></select></label>
+          <div id="realm-options" hidden>
+            <label>LANDSCAPE<select id="realm-biome"><option value="forest">Forest</option><option value="plains">Green plains</option><option value="highland">Highlands</option><option value="snow">Snowy mountains</option><option value="desert">Desert</option><option value="marsh">Marshland</option><option value="coast">Coastal</option><option value="mixed">Mixed</option></select></label>
+            <label class="check-label"><input id="realm-island" type="checkbox" /> Separate island</label>
+          </div>
           <label>DESCRIPTION<textarea id="place-description" rows="3" placeholder="What makes this place memorable?"></textarea></label>
           <label>SESSION NOTES<textarea id="place-notes" rows="5" placeholder="What happened here? Secrets, NPCs, discoveries..."></textarea></label>
           <div class="inspector-hint">Session notes live with this place. A future recording importer can suggest new notes and map changes for your review.</div>
@@ -76,8 +80,8 @@
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <dialog id="help-dialog"><div class="dialog-top"><span class="eyebrow">CARTOGRAPHER'S GUIDE</span><button id="help-close" class="icon-button" aria-label="Close help">×</button></div><h2>Explore the atlas.</h2><p>Scroll to move smoothly between world, continent, province, and settlement detail. The same detail level opens across the whole atlas, so drag sideways to explore neighboring places. Scroll out to reverse the journey. Double-click a place or use the atlas list to fly there.</p><p>Towns and villages are generated automatically. Open one and choose Generate town to preview another seeded layout and size. Choose an element from the left and click the map, or drag it onto the canvas. Your atlas saves in this browser; export a JSON backup to keep or transfer it.</p><button id="help-done" class="primary-button">Return to atlas</button></dialog>
-    <dialog id="generator-dialog"><div class="dialog-top"><span class="eyebrow">ATLAS GENERATOR</span><button id="generator-close" class="icon-button" aria-label="Close generator">×</button></div><h2 id="generator-title">Generate details</h2><p id="generator-intro"></p><label class="generator-field">SEED<input id="generator-seed" type="text" maxlength="60" placeholder="A word or phrase" /></label><label class="generator-field">SIZE<select id="generator-size"><option value="small">Small</option><option value="standard" selected>Standard</option><option value="large">Large</option></select></label><div id="generator-map-preview" class="generator-map-preview" role="img" aria-label="Preview of generated map"></div><p id="generator-preview" class="generator-preview"></p><div class="generator-actions"><button id="generator-reroll" class="text-button">↻ New seed</button><span class="generator-actions-spacer"></span><button id="generator-cancel" class="text-button">Cancel</button><button id="generator-apply" class="primary-button">Add to atlas</button></div></dialog>
-    <script type="module" src="./src/app.js?v=town-base-2"></script>
+    <dialog id="help-dialog"><div class="dialog-top"><span class="eyebrow">CARTOGRAPHER'S GUIDE</span><button id="help-close" class="icon-button" aria-label="Close help">×</button></div><h2>Explore the atlas.</h2><p>Scroll to move smoothly between world, realm, province, and settlement detail. The same detail level opens across the whole atlas, so drag sideways to explore neighboring places. Scroll out to reverse the journey. Double-click a place or use the atlas list to fly there.</p><p>On the world map, realms join one continuous mainland. Select a realm to choose its landscape or mark it as a separate island. Drag a realm to reshape the shared coast, or choose Generate world to preview another seed. Your atlas saves in this browser; export a JSON backup to keep or transfer it.</p><button id="help-done" class="primary-button">Return to atlas</button></dialog>
+    <dialog id="generator-dialog"><div class="dialog-top"><span class="eyebrow">ATLAS GENERATOR</span><button id="generator-close" class="icon-button" aria-label="Close generator">×</button></div><h2 id="generator-title">Generate details</h2><p id="generator-intro"></p><label class="generator-field">SEED<input id="generator-seed" type="text" maxlength="60" placeholder="A word or phrase" /></label><label id="generator-size-field" class="generator-field">SIZE<select id="generator-size"><option value="small">Small</option><option value="standard" selected>Standard</option><option value="large">Large</option></select></label><div id="generator-map-preview" class="generator-map-preview" role="img" aria-label="Preview of generated map"></div><p id="generator-preview" class="generator-preview"></p><div class="generator-actions"><button id="generator-reroll" class="text-button">↻ New seed</button><span class="generator-actions-spacer"></span><button id="generator-cancel" class="text-button">Cancel</button><button id="generator-apply" class="primary-button">Add to atlas</button></div></dialog>
+    <script type="module" src="./src/app.js?v=world-base-1"></script>
   </body>
 </html>

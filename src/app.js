@@ -1,13 +1,13 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
 import { planDetails } from './generator.js';
-import { artworkForPlace, artworkForBoard } from './cartography.js?v=town-base-2';
+import { artworkForPlace, artworkForBoard } from './cartography.js?v=world-base-1';
 import { validateTownBase, nearestTownFootprint } from './town-base.js';
 import { generateTownBase } from './town-generator.js';
 const STORAGE_KEY = 'mapmaker3000.atlas.v1';
 const TYPES = {
   world: { label: 'World', icon: '✧', color: '#806b4e', bg: '#f3ead6' },
-  continent: { label: 'Continent', icon: '✥', color: '#806b4e', bg: '#f3ead6' },
+  continent: { label: 'Realm', icon: '✥', color: '#806b4e', bg: '#f3ead6' },
   province: { label: 'Province', icon: '◆', color: '#527e72', bg: '#e1eee6' },
   region: { label: 'Region', icon: '◈', color: '#527e72', bg: '#e1eee6' },
   town: { label: 'Town', icon: '♜', color: '#986441', bg: '#f3e4d3' },
@@ -17,7 +17,7 @@ const TYPES = {
   room: { label: 'Room', icon: '▣', color: '#7d7796', bg: '#ebe8f3' },
 };
 const PALETTES = {
-  world: ['continent', 'region', 'landmark'],
+  world: ['continent', 'landmark'],
   continent: ['province', 'landmark'],
   province: ['town', 'village', 'landmark'],
   region: ['town', 'village', 'landmark'],
@@ -30,12 +30,19 @@ const PALETTES = {
 const DEFAULT_NAMES = { continent: 'New continent', province: 'New province', region: 'New region', town: 'New town', village: 'New village', landmark: 'New landmark', house: 'New house', room: 'New room' };
 const ENTERABLE = new Set(['continent', 'province', 'region', 'town', 'village', 'house']);
 const ROUTE_TYPES = { road: 'Road', trail: 'Trail', river: 'River', sea: 'Sea route', passage: 'Passage' };
+const REALM_BIOMES = ['forest', 'plains', 'highland', 'snow', 'desert', 'marsh', 'coast', 'mixed'];
+function randomRealmBiome(name) {
+  let value = 2166136261;
+  for (const char of name) value = Math.imul(value ^ char.charCodeAt(0), 16777619);
+  return REALM_BIOMES[(value >>> 0) % REALM_BIOMES.length];
+}
 const $ = (selector) => document.querySelector(selector);
 const els = {
   wrap: $('#canvas-wrap'), canvas: $('#map-canvas'), layer: $('#places-layer'), tree: $('#board-tree'), palette: $('#palette'),
   breadcrumbs: $('#breadcrumbs'), title: $('#map-title'), subtitle: $('#map-subtitle'), kind: $('#map-kind'),
   inspector: $('#inspector'), inspectorHeading: $('#inspector-heading'), inspectorEmpty: $('#inspector-empty'), inspectorForm: $('#inspector-form'),
   name: $('#place-name'), type: $('#place-type'), description: $('#place-description'), notes: $('#place-notes'), enter: $('#enter-place'),
+  realmOptions: $('#realm-options'), realmBiome: $('#realm-biome'), realmIsland: $('#realm-island'),
   zoomLabel: $('#zoom-label'), hint: $('#empty-hint'), saveStatus: $('#save-status'), toast: $('#toast'), importInput: $('#import-input'),
   routesLayer: $('#routes-layer'), terrainLayer: $('#terrain-layer'), connect: $('#connect-places'), connectInstructions: $('#connect-instructions'),
   inspectorKind: $('#inspector-kind'), routeForm: $('#route-form'), routeName: $('#route-name'), routeType: $('#route-type'),
@@ -52,15 +59,18 @@ function makeBoard(name, kind, parentPlaceId = null) {
   return result;
 }
 function makePlace(boardId, type, name, x, y) {
-  return { id: id(), boardId, type, name, x, y, description: '', notes: '', childBoardId: null,
+  const result = { id: id(), boardId, type, name, x, y, description: '', notes: '', childBoardId: null,
     provenance: { kind: 'manual', sessionRefs: [] } };
+  if (type === 'continent') { result.biome = randomRealmBiome(name); result.island = false; }
+  return result;
 }
 function makeRoute(boardId, fromPlaceId, toPlaceId, type = 'road', name = 'New road') {
   return { id: id(), boardId, fromPlaceId, toPlaceId, type, name, description: '', notes: '',
     provenance: { kind: 'manual', sessionRefs: [] } };
 }
 function starterAtlas() {
-  const root = makeBoard('The Shattered Realm', 'world');
+  const root = makeBoard('The Four Realms', 'world');
+  root.worldSeed = 'four-realms';
   const atlas = { schemaVersion: 1, rootBoardId: root.id, boards: { [root.id]: root }, places: {}, routes: {}, sessions: {} };
   const add = (parent, type, name, x, y) => {
     const item = makePlace(parent.id, type, name, x, y);
@@ -72,21 +82,16 @@ function starterAtlas() {
     if (ENTERABLE.has(type)) { const child = makeBoard(name, type, item.id); atlas.boards[child.id] = child; item.childBoardId = child.id; }
     return item.childBoardId ? atlas.boards[item.childBoardId] : null;
   };
-  const continents = [
-    ['Aldervale', ['The Ashen Coast', 'The High March'], ['Greyharbor', 'Briar Glen']],
-    ['Veyr', ['Sunfall Reach', 'The Glass Plains'], ['Emberfall', 'Duskford']],
-    ['Namaris', ['The Verdant Crown', 'Stormward'], ['Thornhaven', 'Moss Hollow']],
-  ];
-  continents.forEach(([name, provinces, settlements], index) => {
-    const continent = add(root, 'continent', name, 85 + index * 320, index === 1 ? 285 : 145);
-    provinces.forEach((provinceName, p) => {
-      const province = add(continent, 'province', provinceName, 185 + p * 420, p === 0 ? 160 : 390);
-      const town = add(province, 'town', settlements[p], 245, 210);
-      const village = add(province, 'village', p === 0 ? 'Willowmere' : 'Oakrest', 620, 405);
-      const road = makeRoute(province.id, town.parentPlaceId, village.parentPlaceId, 'road', 'Old road');
-      atlas.routes[road.id] = road;
-    });
-  });
+  for (const [name,x,y,biome,island] of [
+    ['State Of Kemeia',115,226,'forest',false],
+    ['Idrieland',375,156,'highland',false],
+    ['Emerald Bay',620,261,'desert',false],
+    ['Island Of Crieta',700,0,'forest',true],
+  ]) {
+    const realm = add(root, 'continent', name, x, y);
+    const item = atlas.places[realm.parentPlaceId];
+    item.biome = biome; item.island = island;
+  }
   return atlas;
 }
 function loadAtlas() {
@@ -106,6 +111,10 @@ function validateAtlas(value) {
     for (const placeId of board.placeIds) {
       const place = value.places[placeId];
       if (!place || place.boardId !== board.id || !Object.hasOwn(TYPES, place.type) || !Number.isFinite(place.x) || !Number.isFinite(place.y)) throw new Error('Invalid place data');
+      if (place.type === 'continent') {
+        if (!REALM_BIOMES.includes(place.biome)) place.biome = randomRealmBiome(place.name);
+        place.island = !!place.island;
+      }
       if (place.type === 'house' && board.baseMap && place.baseFootprintIndex == null) {
         const [w,h] = cardSize('house');
         const footprint = nearestTownFootprint(board.baseMap, { x:place.x+w/2, y:place.y+h/2 }, 1000);
@@ -341,6 +350,20 @@ function paintVisible() {
   const wanted = new Set();
   const wantedRoutes = new Set();
   const wantedBoards = new Set();
+  const rootRect = layout.boards.get(atlas.rootBoardId);
+  if (rootRect && !(rootRect.x > view.right || rootRect.y > view.bottom || rootRect.x + rootRect.width < view.left || rootRect.y + rootRect.height < view.top)) {
+    wantedBoards.add(atlas.rootBoardId);
+    let terrain = visibleBoards.get(atlas.rootBoardId);
+    if (!terrain) {
+      terrain = document.createElement('div'); terrain.className = 'terrain-map world-terrain';
+      terrain.innerHTML = artworkForBoard(atlas.boards[atlas.rootBoardId], atlas);
+      visibleBoards.set(atlas.rootBoardId, terrain); els.terrainLayer.append(terrain);
+    }
+    terrain.style.left = `${camera.x + rootRect.x * camera.scale}px`;
+    terrain.style.top = `${camera.y + rootRect.y * camera.scale}px`;
+    terrain.style.transform = `scale(${camera.scale})`;
+    terrain.style.opacity = 1;
+  }
   for (const [depth, opacity] of depths) {
     if (opacity < 0.015) continue;
     for (const [boardId, rect] of layout.boards) {
@@ -424,6 +447,8 @@ function renderInspector() {
     const option = document.createElement('option'); option.value = item.type; option.textContent = TYPES[item.type].label; els.type.append(option);
   }
   els.type.value = item.type;
+  els.realmOptions.hidden = item.type !== 'continent';
+  if (item.type === 'continent') { els.realmBiome.value = item.biome || 'mixed'; els.realmIsland.checked = !!item.island; }
   els.enter.textContent = 'Zoom into this place ↘';
   els.enter.hidden = !ENTERABLE.has(item.type);
 }
@@ -432,8 +457,8 @@ function renderHeader() {
   els.kind.textContent = `${TYPES[board().kind]?.label || 'Map'} map`.toUpperCase();
   els.wrap.dataset.mapKind = board().kind;
   els.subtitle.textContent = board().baseMap ? 'A generated town with districts, streets and building footprints. Generate town to try another layout.' : 'Scroll to reveal detail across the atlas. Drag to visit neighboring places.';
-  els.generateButton.hidden = !['town','village'].includes(board().kind);
-  els.generateButton.textContent = '✦ Generate town';
+  els.generateButton.hidden = !['world','town','village'].includes(board().kind);
+  els.generateButton.textContent = board().kind === 'world' ? '✦ Generate world' : '✦ Generate town';
 }
 function render() { renderNavigation(); renderPalette(); renderPlaces(); renderInspector(); renderHeader(); renderCamera(); }
 function selectPlace(pid) {
@@ -471,6 +496,12 @@ function updateGeneratorPreview() {
   if (!generatorBoardId || !atlas.boards[generatorBoardId]) return;
   const seed = els.generatorSeed.value.trim();
   const target = atlas.boards[generatorBoardId];
+  if (target.kind === 'world') {
+    els.generatorMapPreview.innerHTML = seed ? artworkForBoard({ ...target, worldSeed: seed }, atlas) : '';
+    els.generatorPreview.textContent = seed ? 'Changes the shared coastline and terrain details. Realm positions, landscapes, names and island choices stay in place.' : 'Enter a seed to preview the world.';
+    els.generatorApply.disabled = !seed;
+    return;
+  }
   if (target.kind === 'town' || target.kind === 'village') {
     const base = seed ? generateTownBase(target.kind, seed, els.generatorSize.value) : null;
     els.generatorMapPreview.innerHTML = base ? artworkForBoard({ ...target, baseMap: base }, atlas) : '';
@@ -703,6 +734,14 @@ els.type.addEventListener('change', () => {
   if (item.childBoardId) atlas.boards[item.childBoardId].kind = item.type;
   renderPlaces(); renderInspector(); scheduleSave();
 });
+els.realmBiome.addEventListener('change', () => {
+  const item = place(selectedPlaceId); if (!item || item.type !== 'continent') return;
+  item.biome = els.realmBiome.value; renderPlaces(); scheduleSave();
+});
+els.realmIsland.addEventListener('change', () => {
+  const item = place(selectedPlaceId); if (!item || item.type !== 'continent') return;
+  item.island = els.realmIsland.checked; renderPlaces(); scheduleSave();
+});
 for (const [input, key] of [[els.description, 'description'], [els.notes, 'notes']]) {
   input.addEventListener('input', () => { const item = place(selectedPlaceId); if (item) { item[key] = input.value; scheduleSave(); } });
 }
@@ -735,13 +774,15 @@ $('#delete-place').addEventListener('click', deletePlace);
 $('#close-inspector').addEventListener('click', () => selectPlace(null));
 $('#add-place').addEventListener('click', () => { els.palette.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); toast('Choose a place from the left, then click the map'); });
 els.generateButton.addEventListener('click', () => {
-  if (!['town','village'].includes(board().kind)) return;
+  if (!['world','town','village'].includes(board().kind)) return;
   generatorBoardId = currentBoardId;
-  els.generatorTitle.textContent = board().kind === 'house' ? `Fill ${board().name} with rooms` : `Generate ${board().name}`;
-  els.generatorIntro.textContent = board().kind === 'house' ?
+  els.generatorTitle.textContent = board().kind === 'world' ? `Generate ${board().name}` : board().kind === 'house' ? `Fill ${board().name} with rooms` : `Generate ${board().name}`;
+  els.generatorIntro.textContent = board().kind === 'world' ?
+    'Try a new connected coastline and terrain pattern. Mainland realms remain joined; islands stay separate.' : board().kind === 'house' ?
     'Create a repeatable room layout with passages. Your existing rooms and notes stay where they are.' :
     'Create a complete town map from a seed. Change the seed or size to try another layout. Your named places and notes stay.';
-  els.generatorApply.textContent = board().kind === 'house' ? 'Add rooms' : 'Use this town map';
+  els.generatorApply.textContent = board().kind === 'world' ? 'Use this world map' : board().kind === 'house' ? 'Add rooms' : 'Use this town map';
+  $('#generator-size-field').hidden = board().kind === 'world';
   els.generatorSeed.value = crypto.randomUUID().slice(0, 8);
   els.generatorSize.value = 'standard';
   updateGeneratorPreview(); els.generatorDialog.showModal(); els.generatorSeed.focus();
@@ -755,6 +796,13 @@ els.generatorApply.addEventListener('click', () => {
   if (!generatorBoardId || !atlas.boards[generatorBoardId]) return;
   const seed = els.generatorSeed.value.trim();
   const target = atlas.boards[generatorBoardId];
+  if (target.kind === 'world') {
+    if (!seed) return;
+    target.worldSeed = seed;
+    els.generatorDialog.close(); generatorBoardId = null;
+    renderPlaces(); scheduleSave(); toast('World coastline regenerated');
+    return;
+  }
   if (target.kind === 'town' || target.kind === 'village') {
     if (!seed) return;
     target.baseMap = generateTownBase(target.kind, seed, els.generatorSize.value);

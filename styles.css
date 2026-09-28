@@ -103,7 +103,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .place-card.dragging { cursor: grabbing; }
 .map-label { position: absolute; left: 50%; bottom: 1px; max-width: 96%; transform: translateX(-50%); padding: 2px 5px; background: #eee2c8dc; border: 1px solid #796d5199; color: #463c2b; font: 700 11px/1.2 Cinzel, Georgia, serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; box-shadow: 0 1px 2px #4b3b2a38; }
 .place-card[data-type='continent'] { width: 250px; height: 178px; }
-.place-card[data-type='continent'] .map-label { bottom: 16px; font-size: 15px; }
+.place-card[data-type='continent'] .place-art { display: none; }
+.place-card[data-type='continent'] .map-label { bottom: 54px; max-width: 220px; border: 0; background: transparent; color: #f6eed8; font-size: 16px; letter-spacing: .09em; text-shadow: 0 2px 2px #293b38, 1px 0 #293b38, -1px 0 #293b38, 0 -1px #293b38; box-shadow: none; }
 .place-card[data-type='province'], .place-card[data-type='region'] { width: 205px; height: 125px; }
 .place-card[data-type='room'] { width: 180px; height: 135px; }
 .place-card[data-type='room'] .map-label { bottom: 19px; background: #eadbbdbb; border-color: transparent; font-size: 10px; }
@@ -132,6 +133,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .inspector-form label { display: block; margin-bottom: 18px; color: #bf9e6e; font-size: 10px; letter-spacing: .14em; font-weight: 700; }
 .inspector-form input, .inspector-form select, .inspector-form textarea { display: block; width: 100%; margin-top: 7px; padding: 9px 10px; resize: vertical; border: 1px solid #6e5a43; border-radius: 2px; background: #32302b; color: #f0e1c6; font-size: 12px; font-weight: 400; letter-spacing: 0; line-height: 1.5; }
 .inspector-form input::placeholder, .inspector-form textarea::placeholder { color: #9e907c; }
+.inspector-form .check-label { display: flex; align-items: center; gap: 9px; letter-spacing: .04em; text-transform: none; font-size: 12px; }
+.inspector-form .check-label input { width: auto; margin: 0; accent-color: #bf9e6e; }
 .inspector-hint { border-left: 2px solid #935b39; padding-left: 9px; margin: 0 0 20px; color: #ac9a81; font-size: 11px; line-height: 1.5; }
 .wide { display: block; width: 100%; margin-top: 9px; }
 .danger-button { border: 0; padding: 10px; background: none; color: #c18478; font-size: 11px; font-weight: 700; }

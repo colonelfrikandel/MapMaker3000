@@ -15,6 +15,7 @@ Then open `http://127.0.0.1:8765/` in a browser on **the same computer**. `local
 ## Current features
 
 - Pan and zoom smoothly through world, continent, province, settlement, and interior detail. The same detail level is available everywhere, so panning sideways reveals neighboring places and their details.
+- The world map forms one continuous mainland from neighboring realms. Select a realm to choose its landscape, or mark it as a separate island. Coastlines stay closed and terrain colors and symbols blend between neighboring realms. **Generate world** previews another seeded coastline without moving or renaming realms.
 - Places outside the view are removed from the page and rendered again when you approach them. Scroll out to reverse through the same continuous ranges without a page load.
 - The map uses deterministic vector artwork instead of location cards: coastlines and terrain, plus generated town districts, streets, walls, squares, fields, trees, and building shapes. Map layers are rendered only when in view.
 - Drag existing places and drag new places from the palette. Double-click a place or use the atlas tree to fly to it.
@@ -25,7 +26,7 @@ Then open `http://127.0.0.1:8765/` in a browser on **the same computer**. `local
 
 The data format uses stable IDs for places, boards, and connections. Places and connections have a `provenance` field, and the atlas reserves a `sessions` collection. These are the foundations for future reviewed suggestions from session recordings; no audio processing is included yet. Existing saved atlases without connections load unchanged.
 
-The starting atlas includes three example continents with generated towns and villages. Existing atlases are preserved; use **New atlas** if you want to replace one with the new example.
+The starting atlas uses State Of Kemeia, Idrieland, Emerald Bay, and Island Of Crieta as test realms. The first three share a mainland; Crieta is a separate island. The supplied JSON files are reference material for later generation work; the site generates its world geometry itself. Existing atlases are preserved; use **New atlas** if you want to replace one with the new example.
 
 To try another town layout, open a town or village and click **Generate town**. Choose a seed and size, inspect the preview, then choose **Use this town map**. The same seed and size reproduce the same geometry. House selection and interiors are planned for a later step.
 
