@@ -1,5 +1,5 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
-// Read Watabou's exported geometry into a compact, board-local town base.
+// Shared town geometry, rendering and compatibility with older imported maps.
 const WIDTH = 1010, HEIGHT = 630;
 const POLYGON_LAYERS = ['earth', 'water', 'buildings', 'prisms', 'squares', 'greens', 'fields', 'walls'];
 const LINE_LAYERS = ['roads', 'rivers', 'planks'];
@@ -55,7 +55,7 @@ export function normalizeWatabouTown(data) {
 }
 
 export function validateTownBase(base) {
-  if (!base || base.source !== 'watabou-mfcg' || typeof base.layers !== 'object') throw new Error('Invalid town base');
+  if (!base || !['watabou-mfcg', 'mapmaker-generated'].includes(base.source) || typeof base.layers !== 'object') throw new Error('Invalid town base');
   let total = 0;
   const checkPoints = points => {
     if (!Array.isArray(points) || points.length > 2000) throw new Error('Invalid town shape');
@@ -93,6 +93,7 @@ export function townBaseSvg(base) {
   svg += fill('buildings', '#b17858') + `<path d="${l.buildings.map(polygonPath).join('')}" fill="none" stroke="#5b5146" stroke-width=".8"/>`;
   svg += fill('prisms', '#655f5a') + stroke('planks', '#675f52', null);
   svg += `<path d="${l.walls.map(polygonPath).join('')}" fill="none" stroke="#4e4c49" stroke-width="4" stroke-linejoin="round"/>`;
+  svg += l.trees.map(([x,y]) => `<circle cx="${x}" cy="${y}" r="3.2" fill="#7e9b70" stroke="#607b5d" stroke-width=".8"/>`).join('');
   for (const district of l.districts) {
     const poly = district.polygon;
     const x = round(poly.reduce((sum,p)=>sum+p[0],0)/poly.length), y = round(poly.reduce((sum,p)=>sum+p[1],0)/poly.length);

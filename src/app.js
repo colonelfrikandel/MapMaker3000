@@ -1,8 +1,9 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
-import { canGenerate, planDetails } from './generator.js';
-import { artworkForPlace, artworkForBoard } from './cartography.js?v=town-base-1';
-import { normalizeWatabouTown, validateTownBase, nearestTownFootprint } from './watabou.js';
+import { planDetails } from './generator.js';
+import { artworkForPlace, artworkForBoard } from './cartography.js?v=town-base-2';
+import { validateTownBase, nearestTownFootprint } from './town-base.js';
+import { generateTownBase } from './town-generator.js';
 const STORAGE_KEY = 'mapmaker3000.atlas.v1';
 const TYPES = {
   world: { label: 'World', icon: '✧', color: '#806b4e', bg: '#f3ead6' },
@@ -20,10 +21,10 @@ const PALETTES = {
   continent: ['province', 'landmark'],
   province: ['town', 'village', 'landmark'],
   region: ['town', 'village', 'landmark'],
-  town: ['house', 'landmark'],
-  village: ['house', 'landmark'],
+  town: ['landmark'],
+  village: ['landmark'],
   landmark: [],
-  house: ['room'],
+  house: [],
   room: [],
 };
 const DEFAULT_NAMES = { continent: 'New continent', province: 'New province', region: 'New region', town: 'New town', village: 'New village', landmark: 'New landmark', house: 'New house', room: 'New room' };
@@ -42,11 +43,14 @@ const els = {
   generateButton: $('#generate-details'), generatorDialog: $('#generator-dialog'), generatorTitle: $('#generator-title'),
   generatorIntro: $('#generator-intro'), generatorSeed: $('#generator-seed'), generatorSize: $('#generator-size'),
   generatorPreview: $('#generator-preview'), generatorMapPreview: $('#generator-map-preview'), generatorApply: $('#generator-apply'),
-  importTownBase: $('#import-town-base'), townBaseInput: $('#town-base-input'),
 };
 
 function id() { return crypto.randomUUID(); }
-function makeBoard(name, kind, parentPlaceId = null) { return { id: id(), name, kind, parentPlaceId, placeIds: [] }; }
+function makeBoard(name, kind, parentPlaceId = null) {
+  const result = { id: id(), name, kind, parentPlaceId, placeIds: [] };
+  if (kind === 'town' || kind === 'village') result.baseMap = generateTownBase(kind, name, 'standard');
+  return result;
+}
 function makePlace(boardId, type, name, x, y) {
   return { id: id(), boardId, type, name, x, y, description: '', notes: '', childBoardId: null,
     provenance: { kind: 'manual', sessionRefs: [] } };
@@ -60,6 +64,10 @@ function starterAtlas() {
   const atlas = { schemaVersion: 1, rootBoardId: root.id, boards: { [root.id]: root }, places: {}, routes: {}, sessions: {} };
   const add = (parent, type, name, x, y) => {
     const item = makePlace(parent.id, type, name, x, y);
+    if (type === 'house' && parent.baseMap) {
+      const footprint = nearestTownFootprint(parent.baseMap, { x:x+cardSize(type)[0]/2, y:y+cardSize(type)[1]/2 }, 1000);
+      if (footprint) { item.baseFootprintIndex = footprint.index; item.x = Math.round(footprint.x-cardSize(type)[0]/2); item.y = Math.round(footprint.y-cardSize(type)[1]/2); }
+    }
     atlas.places[item.id] = item; parent.placeIds.push(item.id);
     if (ENTERABLE.has(type)) { const child = makeBoard(name, type, item.id); atlas.boards[child.id] = child; item.childBoardId = child.id; }
     return item.childBoardId ? atlas.boards[item.childBoardId] : null;
@@ -77,11 +85,6 @@ function starterAtlas() {
       const village = add(province, 'village', p === 0 ? 'Willowmere' : 'Oakrest', 620, 405);
       const road = makeRoute(province.id, town.parentPlaceId, village.parentPlaceId, 'road', 'Old road');
       atlas.routes[road.id] = road;
-      for (const [settlement, prefix] of [[town, 'The Copper Lantern'], [village, 'The Old Cottage']]) {
-        const house = add(settlement, 'house', prefix, 340, 265);
-        add(house, 'room', 'Common room', 210, 170);
-        add(house, 'room', 'Cellar', 570, 360);
-      }
     });
   });
   return atlas;
@@ -98,10 +101,16 @@ function validateAtlas(value) {
       !value.boards[value.rootBoardId] || !Array.isArray(value.boards[value.rootBoardId].placeIds)) throw new Error('Unsupported atlas file');
   for (const board of Object.values(value.boards)) {
     if (!board || typeof board.name !== 'string' || !Array.isArray(board.placeIds)) throw new Error('Invalid map data');
+    if (!board.baseMap && ['town', 'village'].includes(board.kind)) board.baseMap = generateTownBase(board.kind, board.name, 'standard');
     if (board.baseMap) validateTownBase(board.baseMap);
     for (const placeId of board.placeIds) {
       const place = value.places[placeId];
       if (!place || place.boardId !== board.id || !Object.hasOwn(TYPES, place.type) || !Number.isFinite(place.x) || !Number.isFinite(place.y)) throw new Error('Invalid place data');
+      if (place.type === 'house' && board.baseMap && place.baseFootprintIndex == null) {
+        const [w,h] = cardSize('house');
+        const footprint = nearestTownFootprint(board.baseMap, { x:place.x+w/2, y:place.y+h/2 }, 1000);
+        if (footprint) { place.baseFootprintIndex = footprint.index; place.x = Math.round(footprint.x-w/2); place.y = Math.round(footprint.y-h/2); }
+      }
       if (place.baseFootprintIndex != null && (!board.baseMap || !Number.isInteger(place.baseFootprintIndex) || place.baseFootprintIndex < 0 || place.baseFootprintIndex >= board.baseMap.layers.buildings.length)) throw new Error('Invalid notable building');
     }
   }
@@ -422,9 +431,9 @@ function renderHeader() {
   els.title.textContent = board().name;
   els.kind.textContent = `${TYPES[board().kind]?.label || 'Map'} map`.toUpperCase();
   els.wrap.dataset.mapKind = board().kind;
-  els.subtitle.textContent = board().baseMap ? 'Town base imported. Add a notable house by choosing a building footprint.' : 'Scroll to reveal detail across the atlas. Drag to visit neighboring places.';
-  els.generateButton.hidden = !canGenerate(board().kind) || !!board().baseMap;
-  els.importTownBase.hidden = !['town', 'village'].includes(board().kind);
+  els.subtitle.textContent = board().baseMap ? 'A generated town with districts, streets and building footprints. Generate town to try another layout.' : 'Scroll to reveal detail across the atlas. Drag to visit neighboring places.';
+  els.generateButton.hidden = !['town','village'].includes(board().kind);
+  els.generateButton.textContent = '✦ Generate town';
 }
 function render() { renderNavigation(); renderPalette(); renderPlaces(); renderInspector(); renderHeader(); renderCamera(); }
 function selectPlace(pid) {
@@ -462,6 +471,15 @@ function updateGeneratorPreview() {
   if (!generatorBoardId || !atlas.boards[generatorBoardId]) return;
   const seed = els.generatorSeed.value.trim();
   const target = atlas.boards[generatorBoardId];
+  if (target.kind === 'town' || target.kind === 'village') {
+    const base = seed ? generateTownBase(target.kind, seed, els.generatorSize.value) : null;
+    els.generatorMapPreview.innerHTML = base ? artworkForBoard({ ...target, baseMap: base }, atlas) : '';
+    els.generatorPreview.textContent = base ?
+      `${base.layers.buildings.length} building shapes, ${base.layers.districts.length} districts, streets and public spaces. Your named places and notes stay.` :
+      'Enter a seed to preview a town.';
+    els.generatorApply.disabled = !base;
+    return;
+  }
   const repeated = seed && generatedBefore(generatorBoardId, seed);
   const plan = seed && !repeated ? generatorPlan(generatorBoardId, seed, els.generatorSize.value) : [];
   const previewPlaces = Object.fromEntries(plan.map((spec, index) => [`preview-${index}`, spec]));
@@ -717,31 +735,16 @@ $('#delete-place').addEventListener('click', deletePlace);
 $('#close-inspector').addEventListener('click', () => selectPlace(null));
 $('#add-place').addEventListener('click', () => { els.palette.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); toast('Choose a place from the left, then click the map'); });
 els.generateButton.addEventListener('click', () => {
-  if (!canGenerate(board().kind) || board().baseMap) return;
+  if (!['town','village'].includes(board().kind)) return;
   generatorBoardId = currentBoardId;
-  els.generatorTitle.textContent = board().kind === 'house' ? `Fill ${board().name} with rooms` : `Grow ${board().name}`;
+  els.generatorTitle.textContent = board().kind === 'house' ? `Fill ${board().name} with rooms` : `Generate ${board().name}`;
   els.generatorIntro.textContent = board().kind === 'house' ?
     'Create a repeatable room layout with passages. Your existing rooms and notes stay where they are.' :
-    'Create a repeatable settlement layout with houses, a gathering place, paths, and ready-made interiors. Your existing places and notes stay where they are.';
+    'Create a complete town map from a seed. Change the seed or size to try another layout. Your named places and notes stay.';
+  els.generatorApply.textContent = board().kind === 'house' ? 'Add rooms' : 'Use this town map';
   els.generatorSeed.value = crypto.randomUUID().slice(0, 8);
   els.generatorSize.value = 'standard';
   updateGeneratorPreview(); els.generatorDialog.showModal(); els.generatorSeed.focus();
-});
-els.importTownBase.addEventListener('click', () => els.townBaseInput.click());
-els.townBaseInput.addEventListener('change', async () => {
-  const file = els.townBaseInput.files?.[0]; if (!file) return;
-  const target = board();
-  try {
-    if (!['town', 'village'].includes(target.kind)) throw new Error('Open a town or village first');
-    if (file.size > 6_000_000) throw new Error('Town file is too large');
-    const base = normalizeWatabouTown(JSON.parse(await file.text()));
-    if (target.baseMap && !confirm('Replace the current town base? Named places and notes will remain.')) return;
-    if (target.baseMap) for (const pid of target.placeIds) delete atlas.places[pid]?.baseFootprintIndex;
-    target.baseMap = base;
-    renderPlaces(); renderHeader(); renderPalette(); scheduleSave();
-    toast(`Town base imported: ${base.layers.buildings.length} building footprints`);
-  } catch (error) { toast(error.message || 'Could not import this town'); }
-  finally { els.townBaseInput.value = ''; }
 });
 els.generatorSeed.addEventListener('input', updateGeneratorPreview);
 els.generatorSize.addEventListener('change', updateGeneratorPreview);
@@ -751,6 +754,29 @@ $('#generator-cancel').addEventListener('click', () => els.generatorDialog.close
 els.generatorApply.addEventListener('click', () => {
   if (!generatorBoardId || !atlas.boards[generatorBoardId]) return;
   const seed = els.generatorSeed.value.trim();
+  const target = atlas.boards[generatorBoardId];
+  if (target.kind === 'town' || target.kind === 'village') {
+    if (!seed) return;
+    target.baseMap = generateTownBase(target.kind, seed, els.generatorSize.value);
+    const claimed = new Set();
+    for (const pid of target.placeIds) {
+      const item = place(pid);
+      if (item?.type !== 'house') continue;
+      const [w,h] = cardSize('house');
+      let best = null, distance = Infinity;
+      for (const [index, polygon] of target.baseMap.layers.buildings.entries()) {
+        if (claimed.has(index)) continue;
+        const x=polygon.reduce((sum,p)=>sum+p[0],0)/polygon.length;
+        const y=polygon.reduce((sum,p)=>sum+p[1],0)/polygon.length;
+        const d=(x-item.x-w/2)**2+(y-item.y-h/2)**2;
+        if (d<distance) { distance=d; best={index,x,y}; }
+      }
+      if (best) { item.baseFootprintIndex=best.index; item.x=Math.round(best.x-w/2); item.y=Math.round(best.y-h/2); claimed.add(best.index); }
+    }
+    els.generatorDialog.close(); generatorBoardId = null;
+    render(); scheduleSave(); toast(`${target.baseMap.layers.buildings.length} buildings generated`);
+    return;
+  }
   if (!seed || generatedBefore(generatorBoardId, seed)) { updateGeneratorPreview(); return; }
   const plan = generatorPlan(generatorBoardId, seed, els.generatorSize.value);
   if (!plan.length) { updateGeneratorPreview(); return; }

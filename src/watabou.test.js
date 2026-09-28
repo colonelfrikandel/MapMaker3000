@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeWatabouTown, townBaseSvg, validateTownBase, nearestTownFootprint } from './watabou.js';
+import { normalizeWatabouTown, townBaseSvg, validateTownBase, nearestTownFootprint } from './town-base.js';
 
 const sample = {
   type: 'FeatureCollection', features: [

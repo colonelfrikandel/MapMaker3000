@@ -1,7 +1,7 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 // Deterministic, code-native map artwork. All SVG strings contain generated numbers only.
 import { cardSize } from './geometry.js';
-import { townBaseSvg } from './watabou.js';
+import { townBaseSvg } from './town-base.js';
 
 function hash(value) {
   let h = 2166136261;
