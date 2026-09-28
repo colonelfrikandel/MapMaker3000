@@ -17,10 +17,11 @@ Then open `http://127.0.0.1:8765/` in a browser on **the same computer**. `local
 - Pan and zoom smoothly through world, continent, province, settlement, and interior detail. The same detail level is available everywhere, so panning sideways reveals neighboring places and their details.
 - Places outside the view are removed from the page and rendered again when you approach them. Scroll out to reverse through the same continuous ranges without a page load.
 - Drag existing places and drag new places from the palette. Double-click a place or use the atlas tree to fly to it.
+- Connect two places on the same map with a road, trail, river, sea route, or passage. Click the connection to name it and add travel notes. Connections follow their places when those places move.
 - Add descriptions and session notes to places.
 - Automatically save in this browser and export/import an atlas as JSON.
 
-The data format uses stable IDs for places and boards. Each place also has a `provenance` field, and the atlas reserves a `sessions` collection. These are the foundations for future reviewed suggestions from session recordings; no audio processing is included yet.
+The data format uses stable IDs for places, boards, and connections. Places and connections have a `provenance` field, and the atlas reserves a `sessions` collection. These are the foundations for future reviewed suggestions from session recordings; no audio processing is included yet. Existing saved atlases without connections load unchanged.
 
 The starting atlas includes three example continents and detail maps down to rooms. Existing atlases are preserved; use **New atlas** if you want to replace one with the new example.
 

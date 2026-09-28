@@ -16,6 +16,9 @@
           <div id="board-tree" class="board-tree"></div>
           <div class="section-heading palette-heading"><span>MAP ELEMENTS</span><small>Drag or click</small></div>
           <div id="palette" class="palette"></div>
+          <div class="section-heading route-heading"><span>CONNECTIONS</span></div>
+          <button id="connect-places" class="connect-button" type="button">⌁ Connect places</button>
+          <p id="connect-instructions" class="connect-instructions">Draw roads, trails, rivers, and sea routes between places on the same map.</p>
           <div class="help-card"><span class="help-icon">✥</span><strong>Follow the map</strong><p>Scroll smoothly for more detail. Drag sideways to explore neighboring lands at the same scale.</p></div>
         </div>
         <div class="sidebar-footer"><span class="save-dot"></span><span id="save-status">Saved in this browser</span></div>
@@ -42,6 +45,7 @@
         <div class="canvas-wrap" id="canvas-wrap">
           <div id="map-canvas" class="map-canvas" aria-label="Interactive map canvas">
             <div class="map-decor map-decor-one"></div><div class="map-decor map-decor-two"></div><div class="map-decor map-decor-three"></div>
+            <svg id="routes-layer" class="routes-layer" aria-label="Map routes"></svg>
             <div id="places-layer" class="places-layer"></div>
           </div>
           <div id="empty-hint" class="empty-hint" hidden><span>✧</span><strong>This map is waiting for a story</strong><p>Choose a place from the left, then click anywhere to add it.</p></div>
@@ -50,8 +54,8 @@
         </div>
       </main>
 
-      <aside class="inspector" id="inspector" aria-label="Place details">
-        <div class="inspector-header"><div><span class="eyebrow">PLACE DETAILS</span><h2 id="inspector-heading">Select a place</h2></div><button id="close-inspector" class="icon-button" aria-label="Close place details">×</button></div>
+      <aside class="inspector" id="inspector" aria-label="Map details">
+        <div class="inspector-header"><div><span class="eyebrow" id="inspector-kind">PLACE DETAILS</span><h2 id="inspector-heading">Select a place</h2></div><button id="close-inspector" class="icon-button" aria-label="Close details">×</button></div>
         <div id="inspector-empty" class="inspector-empty"><div class="inspector-empty-art">✥</div><strong>Chronicle the realm</strong><p>Select a place to give it a name, record its lore, and chart what lies within.</p></div>
         <div id="inspector-form" class="inspector-form" hidden>
           <label>NAME<input id="place-name" type="text" maxlength="80" placeholder="Name this place" /></label>
@@ -62,10 +66,17 @@
           <button id="enter-place" class="primary-button wide">Explore inside ↗</button>
           <button id="delete-place" class="danger-button wide">Delete place</button>
         </div>
+        <div id="route-form" class="inspector-form" hidden>
+          <label>NAME<input id="route-name" type="text" maxlength="80" placeholder="Name this route" /></label>
+          <label>KIND<select id="route-type"><option value="road">Road</option><option value="trail">Trail</option><option value="river">River</option><option value="sea">Sea route</option><option value="passage">Passage</option></select></label>
+          <label>DESCRIPTION<textarea id="route-description" rows="3" placeholder="What is the journey like?"></textarea></label>
+          <label>SESSION NOTES<textarea id="route-notes" rows="4" placeholder="Encounters, discoveries, and travel notes..."></textarea></label>
+          <button id="delete-route" class="danger-button wide">Delete connection</button>
+        </div>
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <dialog id="help-dialog"><div class="dialog-top"><span class="eyebrow">CARTOGRAPHER'S GUIDE</span><button id="help-close" class="icon-button" aria-label="Close help">×</button></div><h2>Explore from realm to room.</h2><p>Scroll to move smoothly between world, continent, province, settlement, and house detail. The same detail level opens across the whole atlas, so drag sideways to explore neighboring places. Scroll out to reverse the journey. Double-click a place or use the atlas list to fly there.</p><p>Choose an element from the left and click the map, or drag it onto the canvas. Drag existing places to move them. Your atlas saves in this browser; export a JSON backup to keep or transfer it.</p><button id="help-done" class="primary-button">Return to atlas</button></dialog>
+    <dialog id="help-dialog"><div class="dialog-top"><span class="eyebrow">CARTOGRAPHER'S GUIDE</span><button id="help-close" class="icon-button" aria-label="Close help">×</button></div><h2>Explore from realm to room.</h2><p>Scroll to move smoothly between world, continent, province, settlement, and house detail. The same detail level opens across the whole atlas, so drag sideways to explore neighboring places. Scroll out to reverse the journey. Double-click a place or use the atlas list to fly there.</p><p>Choose an element from the left and click the map, or drag it onto the canvas. Drag existing places to move them. Use Connect places, then choose two places on the same map to draw a road or other route. Click a route to edit its details. Your atlas saves in this browser; export a JSON backup to keep or transfer it.</p><button id="help-done" class="primary-button">Return to atlas</button></dialog>
     <script type="module" src="./src/app.js"></script>
   </body>
 </html>

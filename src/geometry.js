@@ -14,8 +14,10 @@ export function cardSize(type) { return CARD_SIZE[type] || CARD_SIZE.default; }
 export function buildLayout(atlas) {
   const boards = new Map();
   const places = new Map();
+  const routes = new Map();
   const byDepth = Array.from({ length: MAX_DEPTH + 1 }, () => []);
   const cells = Array.from({ length: MAX_DEPTH + 1 }, () => new Map());
+  const routeCells = Array.from({ length: MAX_DEPTH + 1 }, () => new Map());
   const seen = new Set();
   function visit(boardId, x, y, scale, depth) {
     if (seen.has(boardId) || depth > MAX_DEPTH) return;
@@ -45,7 +47,23 @@ export function buildLayout(atlas) {
     }
   }
   visit(atlas.rootBoardId, 0, 0, 1, 0);
-  return { boards, places, byDepth, cells };
+  for (const route of Object.values(atlas.routes || {})) {
+    const from = places.get(route.fromPlaceId), to = places.get(route.toPlaceId);
+    if (!from || !to || from.boardId !== to.boardId || from.boardId !== route.boardId) continue;
+    const x1 = from.x + from.width / 2, y1 = from.y + from.height / 2;
+    const x2 = to.x + to.width / 2, y2 = to.y + to.height / 2;
+    const rect = { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1), x1, y1, x2, y2, depth: from.depth };
+    routes.set(route.id, rect);
+    const cellSize = GRID_SIZE / ZOOM_STEP ** rect.depth;
+    for (let gx = Math.floor(rect.x / cellSize); gx <= Math.floor((rect.x + rect.width) / cellSize); gx++) {
+      for (let gy = Math.floor(rect.y / cellSize); gy <= Math.floor((rect.y + rect.height) / cellSize); gy++) {
+        const key = `${gx},${gy}`;
+        if (!routeCells[rect.depth].has(key)) routeCells[rect.depth].set(key, new Set());
+        routeCells[rect.depth].get(key).add(route.id);
+      }
+    }
+  }
+  return { boards, places, routes, byDepth, cells, routeCells };
 }
 
 export function nearbyPlaces(layout, depth, view, margin = 0) {
@@ -57,6 +75,17 @@ export function nearbyPlaces(layout, depth, view, margin = 0) {
     }
   }
   return [...ids].filter(id => intersects(layout.places.get(id), view, margin));
+}
+
+export function nearbyRoutes(layout, depth, view, margin = 0) {
+  const cellSize = GRID_SIZE / ZOOM_STEP ** depth;
+  const ids = new Set();
+  for (let gx = Math.floor((view.left - margin) / cellSize); gx <= Math.floor((view.right + margin) / cellSize); gx++) {
+    for (let gy = Math.floor((view.top - margin) / cellSize); gy <= Math.floor((view.bottom + margin) / cellSize); gy++) {
+      for (const id of layout.routeCells[depth].get(`${gx},${gy}`) || []) ids.add(id);
+    }
+  }
+  return [...ids].filter(id => intersects(layout.routes.get(id), view, margin));
 }
 
 export function levelAtScale(scale, baseScale) {

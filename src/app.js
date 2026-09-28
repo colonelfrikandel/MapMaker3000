@@ -1,5 +1,5 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
-import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
+import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
 const STORAGE_KEY = 'mapmaker3000.atlas.v1';
 const TYPES = {
   world: { label: 'World', icon: '✧', color: '#806b4e', bg: '#f3ead6' },
@@ -25,6 +25,7 @@ const PALETTES = {
 };
 const DEFAULT_NAMES = { continent: 'New continent', province: 'New province', region: 'New region', town: 'New town', village: 'New village', landmark: 'New landmark', house: 'New house', room: 'New room' };
 const ENTERABLE = new Set(['continent', 'province', 'region', 'town', 'village', 'house']);
+const ROUTE_TYPES = { road: 'Road', trail: 'Trail', river: 'River', sea: 'Sea route', passage: 'Passage' };
 const $ = (selector) => document.querySelector(selector);
 const els = {
   wrap: $('#canvas-wrap'), canvas: $('#map-canvas'), layer: $('#places-layer'), tree: $('#board-tree'), palette: $('#palette'),
@@ -32,6 +33,9 @@ const els = {
   inspector: $('#inspector'), inspectorHeading: $('#inspector-heading'), inspectorEmpty: $('#inspector-empty'), inspectorForm: $('#inspector-form'),
   name: $('#place-name'), type: $('#place-type'), description: $('#place-description'), notes: $('#place-notes'), enter: $('#enter-place'),
   zoomLabel: $('#zoom-label'), hint: $('#empty-hint'), saveStatus: $('#save-status'), toast: $('#toast'), importInput: $('#import-input'),
+  routesLayer: $('#routes-layer'), connect: $('#connect-places'), connectInstructions: $('#connect-instructions'),
+  inspectorKind: $('#inspector-kind'), routeForm: $('#route-form'), routeName: $('#route-name'), routeType: $('#route-type'),
+  routeDescription: $('#route-description'), routeNotes: $('#route-notes'),
 };
 
 function id() { return crypto.randomUUID(); }
@@ -40,9 +44,13 @@ function makePlace(boardId, type, name, x, y) {
   return { id: id(), boardId, type, name, x, y, description: '', notes: '', childBoardId: null,
     provenance: { kind: 'manual', sessionRefs: [] } };
 }
+function makeRoute(boardId, fromPlaceId, toPlaceId, type = 'road', name = 'New road') {
+  return { id: id(), boardId, fromPlaceId, toPlaceId, type, name, description: '', notes: '',
+    provenance: { kind: 'manual', sessionRefs: [] } };
+}
 function starterAtlas() {
   const root = makeBoard('The Shattered Realm', 'world');
-  const atlas = { schemaVersion: 1, rootBoardId: root.id, boards: { [root.id]: root }, places: {}, sessions: {} };
+  const atlas = { schemaVersion: 1, rootBoardId: root.id, boards: { [root.id]: root }, places: {}, routes: {}, sessions: {} };
   const add = (parent, type, name, x, y) => {
     const item = makePlace(parent.id, type, name, x, y);
     atlas.places[item.id] = item; parent.placeIds.push(item.id);
@@ -60,6 +68,8 @@ function starterAtlas() {
       const province = add(continent, 'province', provinceName, 185 + p * 420, p === 0 ? 160 : 390);
       const town = add(province, 'town', settlements[p], 245, 210);
       const village = add(province, 'village', p === 0 ? 'Willowmere' : 'Oakrest', 620, 405);
+      const road = makeRoute(province.id, town.parentPlaceId, village.parentPlaceId, 'road', 'Old road');
+      atlas.routes[road.id] = road;
       for (const [settlement, prefix] of [[town, 'The Copper Lantern'], [village, 'The Old Cottage']]) {
         const house = add(settlement, 'house', prefix, 340, 265);
         add(house, 'room', 'Common room', 210, 170);
@@ -83,17 +93,28 @@ function validateAtlas(value) {
     if (!board || typeof board.name !== 'string' || !Array.isArray(board.placeIds)) throw new Error('Invalid map data');
     for (const placeId of board.placeIds) {
       const place = value.places[placeId];
-      if (!place || place.boardId !== board.id || !TYPES[place.type] || !Number.isFinite(place.x) || !Number.isFinite(place.y)) throw new Error('Invalid place data');
+      if (!place || place.boardId !== board.id || !Object.hasOwn(TYPES, place.type) || !Number.isFinite(place.x) || !Number.isFinite(place.y)) throw new Error('Invalid place data');
     }
   }
   value.sessions ||= {};
+  value.routes ||= {};
+  if (typeof value.routes !== 'object' || Array.isArray(value.routes)) throw new Error('Invalid route data');
+  for (const [routeId, route] of Object.entries(value.routes)) {
+    if (!route || route.id !== routeId || !value.boards[route.boardId] || !value.places[route.fromPlaceId] || !value.places[route.toPlaceId] ||
+        value.places[route.fromPlaceId].boardId !== route.boardId || value.places[route.toPlaceId].boardId !== route.boardId ||
+        !value.boards[route.boardId].placeIds.includes(route.fromPlaceId) || !value.boards[route.boardId].placeIds.includes(route.toPlaceId) ||
+        route.fromPlaceId === route.toPlaceId || !Object.hasOwn(ROUTE_TYPES, route.type) || typeof route.name !== 'string') throw new Error('Invalid route data');
+  }
   return value;
 }
 
 let atlas = loadAtlas();
 let currentBoardId = atlas.rootBoardId;
 let selectedPlaceId = null;
+let selectedRouteId = null;
 let placingType = null;
+let connectMode = false;
+let connectFromId = null;
 let camera = { x: 0, y: 0, scale: 1 };
 let gesture = null;
 let saveTimer = null;
@@ -103,10 +124,12 @@ let layout = buildLayout(atlas);
 let layoutDirty = false;
 let paintQueued = false;
 let visibleCards = new Map();
+let visibleRoutes = new Map();
 let flyAnimation = null;
 
 function board() { return atlas.boards[currentBoardId]; }
 function place(id) { return atlas.places[id]; }
+function route(id) { return atlas.routes[id]; }
 function scheduleSave() {
   els.saveStatus.textContent = 'Saving…';
   clearTimeout(saveTimer);
@@ -159,7 +182,8 @@ function centerOnBoard(boardId, animate = true) {
     x: els.wrap.clientWidth / 2 - (rect.x + rect.width / 2) * targetScale,
     y: els.wrap.clientHeight / 2 - (rect.y + rect.height / 2) * targetScale,
   };
-  currentBoardId = boardId; selectedPlaceId = null; placingType = null;
+  currentBoardId = boardId; selectedPlaceId = null; selectedRouteId = null; placingType = null;
+  connectMode = false; connectFromId = null; updateConnectUI();
   renderNavigation(); renderPalette(); renderInspector(); renderHeader();
   if (!animate) { camera = destination; renderCamera(); return; }
   const from = { ...camera }, started = performance.now();
@@ -213,16 +237,25 @@ function renderPalette() {
     const icon = document.createElement('span'); icon.className = 'palette-icon'; icon.textContent = TYPES[type].icon; icon.style.color = TYPES[type].color;
     const label = document.createElement('span'); label.textContent = TYPES[type].label;
     button.append(icon, label);
-    button.addEventListener('click', () => { placingType = placingType === type ? null : type; renderPalette(); els.wrap.classList.toggle('placing', !!placingType); });
+    button.addEventListener('click', () => { placingType = placingType === type ? null : type; connectMode = false; connectFromId = null; updateConnectUI(); renderPalette(); });
     button.addEventListener('dragstart', (event) => { event.dataTransfer.setData('text/mapmaker-place', type); event.dataTransfer.effectAllowed = 'copy'; });
     els.palette.append(button);
   }
   els.wrap.classList.toggle('placing', !!placingType);
 }
+function updateConnectUI() {
+  els.connect.classList.toggle('active', connectMode);
+  els.wrap.classList.toggle('connecting', connectMode);
+  els.connect.textContent = !connectMode ? '⌁ Connect places' : connectFromId ? '⌁ Choose destination' : '⌁ Choose first place';
+  els.connectInstructions.textContent = !connectMode ? 'Draw roads, trails, rivers, and sea routes between places on the same map.' :
+    connectFromId ? `Choose a second place on this map to connect to ${place(connectFromId)?.name || 'the first place'}.` : 'Choose the first place on this map. Press Escape to cancel.';
+  for (const card of visibleCards.values()) card.classList.toggle('connect-source', card.dataset.placeId === connectFromId);
+}
 function renderPlaces() {
   layout = buildLayout(atlas);
   layoutDirty = false;
   els.layer.replaceChildren(); visibleCards = new Map();
+  els.routesLayer.replaceChildren(); visibleRoutes = new Map();
   renderCamera();
 }
 function contextBoardAt(point, depth) {
@@ -245,6 +278,7 @@ function refreshContext() {
   const next = contextBoardAt(center, depth);
   if (next !== currentBoardId) {
     currentBoardId = next; placingType = null;
+    if (connectFromId && place(connectFromId)?.boardId !== next) { connectFromId = null; updateConnectUI(); }
     renderNavigation(); renderPalette(); renderInspector(); renderHeader();
   }
   els.hint.hidden = board().placeIds.length > 0;
@@ -262,6 +296,16 @@ function makeCard(id) {
   card.append(icon, title, meta, enter);
   return card;
 }
+function makeRouteNode(id) {
+  const svg = 'http://www.w3.org/2000/svg';
+  const group = document.createElementNS(svg, 'g');
+  group.classList.add('route-group'); group.dataset.routeId = id; group.dataset.type = route(id).type;
+  group.setAttribute('role', 'button'); group.setAttribute('tabindex', '0'); group.setAttribute('aria-label', `Edit connection ${route(id).name}`);
+  const line = document.createElementNS(svg, 'path'); line.classList.add('route-line');
+  const hit = document.createElementNS(svg, 'path'); hit.classList.add('route-hit');
+  const label = document.createElementNS(svg, 'text'); label.classList.add('route-label'); label.textContent = route(id).name;
+  group.append(line, hit, label); return group;
+}
 function paintVisible() {
   paintQueued = false;
   if (layoutDirty) { layout = buildLayout(atlas); layoutDirty = false; }
@@ -274,8 +318,24 @@ function paintVisible() {
     bottom: (els.wrap.clientHeight - camera.y) / camera.scale,
   };
   const wanted = new Set();
+  const wantedRoutes = new Set();
   for (const [depth, opacity] of depths) {
     if (opacity < 0.015) continue;
+    for (const id of nearbyRoutes(layout, depth, view, 240 / camera.scale)) {
+      const rect = layout.routes.get(id); wantedRoutes.add(id);
+      let group = visibleRoutes.get(id);
+      if (!group) { group = makeRouteNode(id); visibleRoutes.set(id, group); els.routesLayer.append(group); }
+      const x1 = camera.x + rect.x1 * camera.scale, y1 = camera.y + rect.y1 * camera.scale;
+      const x2 = camera.x + rect.x2 * camera.scale, y2 = camera.y + rect.y2 * camera.scale;
+      const path = `M ${x1} ${y1} L ${x2} ${y2}`;
+      group.children[0].setAttribute('d', path); group.children[1].setAttribute('d', path);
+      group.children[2].setAttribute('x', String((x1 + x2) / 2));
+      group.children[2].setAttribute('y', String((y1 + y2) / 2 - 9));
+      group.style.opacity = opacity;
+      group.children[1].style.pointerEvents = opacity > 0.35 ? 'stroke' : 'none';
+      group.setAttribute('tabindex', opacity > 0.35 ? '0' : '-1');
+      group.classList.toggle('selected', id === selectedRouteId);
+    }
     for (const id of nearbyPlaces(layout, depth, view, 240 / camera.scale)) {
       const rect = layout.places.get(id);
       wanted.add(id);
@@ -288,18 +348,32 @@ function paintVisible() {
       card.style.opacity = opacity;
       card.style.zIndex = depth;
       card.style.pointerEvents = opacity > 0.35 ? 'auto' : 'none';
+      card.classList.toggle('connect-source', id === connectFromId);
     }
   }
   for (const [id, card] of visibleCards) {
     if (!wanted.has(id)) { card.remove(); visibleCards.delete(id); }
   }
+  for (const [id, group] of visibleRoutes) {
+    if (!wantedRoutes.has(id)) { group.remove(); visibleRoutes.delete(id); }
+  }
   refreshContext();
 }
 function renderInspector() {
   const item = selectedPlaceId ? place(selectedPlaceId) : null;
-  els.inspector.classList.toggle('open', !!item);
-  els.inspectorHeading.textContent = item ? item.name : 'Select a place';
-  els.inspectorEmpty.hidden = !!item; els.inspectorForm.hidden = !item;
+  const connection = selectedRouteId ? route(selectedRouteId) : null;
+  els.inspector.classList.toggle('open', !!item || !!connection);
+  els.inspectorKind.textContent = connection ? 'CONNECTION DETAILS' : 'PLACE DETAILS';
+  els.inspectorHeading.textContent = item?.name || connection?.name || 'Select a place';
+  els.inspectorEmpty.hidden = !!item || !!connection;
+  els.inspectorForm.hidden = !item;
+  els.routeForm.hidden = !connection;
+  if (connection) {
+    els.routeName.value = connection.name;
+    els.routeType.value = connection.type;
+    els.routeDescription.value = connection.description || '';
+    els.routeNotes.value = connection.notes || '';
+  }
   if (!item) return;
   els.name.value = item.name; els.description.value = item.description || ''; els.notes.value = item.notes || '';
   els.type.replaceChildren();
@@ -322,7 +396,15 @@ function renderHeader() {
 function render() { renderNavigation(); renderPalette(); renderPlaces(); renderInspector(); renderHeader(); renderCamera(); }
 function selectPlace(pid) {
   selectedPlaceId = pid;
+  selectedRouteId = null;
   for (const card of els.layer.querySelectorAll('.place-card')) card.classList.toggle('selected', card.dataset.placeId === pid);
+  for (const group of visibleRoutes.values()) group.classList.remove('selected');
+  renderInspector();
+}
+function selectRoute(id) {
+  selectedRouteId = id; selectedPlaceId = null;
+  for (const card of visibleCards.values()) card.classList.remove('selected');
+  for (const group of visibleRoutes.values()) group.classList.toggle('selected', group.dataset.routeId === id);
   renderInspector();
 }
 function addPlace(type, x, y, boardId = currentBoardId) {
@@ -334,6 +416,19 @@ function addPlace(type, x, y, boardId = currentBoardId) {
   if (ENTERABLE.has(type)) { const child = makeBoard(item.name, type, item.id); atlas.boards[child.id] = child; item.childBoardId = child.id; }
   render(); selectPlace(item.id); scheduleSave(); toast(`${TYPES[type].label} added`);
   if (window.innerWidth > 1050) els.name.focus();
+}
+function connectPlaces(fromId, toId) {
+  const from = place(fromId), to = place(toId);
+  if (!from || !to || fromId === toId) { toast('Choose two different places'); return; }
+  if (from.boardId !== to.boardId) { toast('Choose places on the same map'); return; }
+  const existing = Object.values(atlas.routes).find(item => item.boardId === from.boardId &&
+    ((item.fromPlaceId === fromId && item.toPlaceId === toId) || (item.fromPlaceId === toId && item.toPlaceId === fromId)));
+  connectMode = false; connectFromId = null; updateConnectUI();
+  if (existing) { selectRoute(existing.id); toast('These places are already connected'); return; }
+  const item = makeRoute(from.boardId, fromId, toId);
+  atlas.routes[item.id] = item;
+  renderPlaces(); selectRoute(item.id); scheduleSave(); toast('Connection added');
+  if (window.innerWidth > 1050) els.routeName.focus();
 }
 function enterPlace(target = null) {
   const item = target?.id ? target : place(selectedPlaceId); if (!item || !ENTERABLE.has(item.type)) return;
@@ -347,16 +442,27 @@ function deletePlace() {
   const item = place(selectedPlaceId); if (!item) return;
   const message = item.childBoardId ? `Delete ${item.name} and its detail map? This cannot be undone.` : `Delete ${item.name}?`;
   if (!confirm(message)) return;
+  const removedIds = new Set();
   function removeDescendants(pid) {
     const target = place(pid); if (!target) return;
     if (target.childBoardId) {
       const child = atlas.boards[target.childBoardId];
       if (child) { for (const nestedId of [...child.placeIds]) removeDescendants(nestedId); delete atlas.boards[child.id]; }
     }
-    delete atlas.places[pid];
+    removedIds.add(pid); delete atlas.places[pid];
   }
   atlas.boards[item.boardId].placeIds = atlas.boards[item.boardId].placeIds.filter(pid => pid !== item.id);
-  removeDescendants(item.id); selectedPlaceId = null; render(); scheduleSave(); toast('Place deleted');
+  removeDescendants(item.id);
+  for (const [rid, connection] of Object.entries(atlas.routes)) {
+    if (removedIds.has(connection.fromPlaceId) || removedIds.has(connection.toPlaceId)) delete atlas.routes[rid];
+  }
+  selectedPlaceId = null; render(); scheduleSave(); toast('Place deleted');
+}
+function deleteRoute() {
+  const item = route(selectedRouteId); if (!item) return;
+  if (!confirm(`Delete ${item.name}?`)) return;
+  delete atlas.routes[item.id]; selectedRouteId = null;
+  renderPlaces(); renderInspector(); scheduleSave(); toast('Connection deleted');
 }
 
 function cardAtPoint(clientX, clientY) {
@@ -377,15 +483,23 @@ function addAtScreen(type, clientX, clientY) {
 els.wrap.addEventListener('pointerdown', (event) => {
   if (event.button !== 0 || event.target.closest('.zoom-controls')) return;
   if (flyAnimation) { cancelAnimationFrame(flyAnimation); flyAnimation = null; }
+  const hitRoute = event.target.closest('.route-hit');
+  if (hitRoute) { if (!connectMode) selectRoute(hitRoute.parentElement.dataset.routeId); return; }
   const card = event.target.closest('.place-card') || cardAtPoint(event.clientX, event.clientY);
   if (card) {
     const item = place(card.dataset.placeId); if (!item) return;
+    if (connectMode) {
+      if (!connectFromId) { connectFromId = item.id; selectPlace(item.id); updateConnectUI(); }
+      else connectPlaces(connectFromId, item.id);
+      return;
+    }
     currentBoardId = item.boardId; renderNavigation(); renderPalette(); renderHeader();
     selectPlace(item.id);
     gesture = { kind: 'place', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: item.x, y: item.y, item, card, moved: false };
   } else if (!event.target.closest('.canvas-tip')) {
     if (placingType) { addAtScreen(placingType, event.clientX, event.clientY); return; }
-    selectPlace(null); gesture = { kind: 'pan', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: camera.x, y: camera.y };
+    if (!connectMode) selectPlace(null);
+    gesture = { kind: 'pan', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: camera.x, y: camera.y };
     els.wrap.classList.add('panning');
   }
   if (gesture) els.wrap.setPointerCapture(event.pointerId);
@@ -415,6 +529,11 @@ function endGesture(event) {
 }
 els.wrap.addEventListener('pointerup', endGesture);
 els.wrap.addEventListener('pointercancel', endGesture);
+els.routesLayer.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const group = event.target.closest('.route-group'); if (!group) return;
+  event.preventDefault(); selectRoute(group.dataset.routeId);
+});
 els.wrap.addEventListener('dblclick', event => {
   const card = event.target.closest('.place-card'); if (!card) return;
   selectPlace(card.dataset.placeId); enterPlace();
@@ -447,13 +566,38 @@ els.type.addEventListener('change', () => {
 for (const [input, key] of [[els.description, 'description'], [els.notes, 'notes']]) {
   input.addEventListener('input', () => { const item = place(selectedPlaceId); if (item) { item[key] = input.value; scheduleSave(); } });
 }
+els.connect.addEventListener('click', () => {
+  connectMode = !connectMode;
+  connectFromId = connectMode && selectedPlaceId ? selectedPlaceId : null;
+  placingType = null; renderPalette(); updateConnectUI();
+  if (connectMode) toast(connectFromId ? 'Choose a destination' : 'Choose two places to connect');
+});
+els.routeName.addEventListener('input', () => {
+  const item = route(selectedRouteId); if (!item) return;
+  item.name = els.routeName.value || 'Unnamed connection';
+  els.inspectorHeading.textContent = item.name;
+  const label = visibleRoutes.get(item.id)?.children[2]; if (label) label.textContent = item.name;
+  visibleRoutes.get(item.id)?.setAttribute('aria-label', `Edit connection ${item.name}`);
+  scheduleSave();
+});
+els.routeType.addEventListener('change', () => {
+  const item = route(selectedRouteId); if (!item) return;
+  item.type = els.routeType.value;
+  const group = visibleRoutes.get(item.id); if (group) group.dataset.type = item.type;
+  scheduleSave();
+});
+for (const [input, key] of [[els.routeDescription, 'description'], [els.routeNotes, 'notes']]) {
+  input.addEventListener('input', () => { const item = route(selectedRouteId); if (item) { item[key] = input.value; scheduleSave(); } });
+}
+$('#delete-route').addEventListener('click', deleteRoute);
 els.enter.addEventListener('click', enterPlace);
 $('#delete-place').addEventListener('click', deletePlace);
 $('#close-inspector').addEventListener('click', () => selectPlace(null));
 $('#add-place').addEventListener('click', () => { els.palette.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); toast('Choose a place from the left, then click the map'); });
 $('#new-atlas-button').addEventListener('click', () => {
   if (!confirm('Start a new example atlas? This replaces the atlas saved in this browser. Export a backup first if you want to keep it.')) return;
-  atlas = starterAtlas(); currentBoardId = atlas.rootBoardId; selectedPlaceId = null; placingType = null;
+  atlas = starterAtlas(); currentBoardId = atlas.rootBoardId; selectedPlaceId = null; selectedRouteId = null; placingType = null;
+  connectMode = false; connectFromId = null; updateConnectUI();
   camera = defaultCamera(); render(); scheduleSave(); toast('New atlas created');
 });
 $('#rename-board').addEventListener('click', () => {
@@ -481,7 +625,8 @@ els.importInput.addEventListener('change', async () => {
   try {
     const next = validateAtlas(JSON.parse(await file.text()));
     if (!confirm('Replace the current atlas with this file? Export a backup first if you want to keep it.')) return;
-    atlas = next; currentBoardId = atlas.rootBoardId; selectedPlaceId = null; placingType = null;
+    atlas = next; currentBoardId = atlas.rootBoardId; selectedPlaceId = null; selectedRouteId = null; placingType = null;
+    connectMode = false; connectFromId = null; updateConnectUI();
     camera = defaultCamera(); render(); scheduleSave(); toast('Atlas imported');
   } catch (error) { toast('This file is not a valid MapMaker atlas'); }
   finally { els.importInput.value = ''; }
@@ -491,8 +636,10 @@ $('#help-button').addEventListener('click', () => helpDialog.showModal());
 $('#help-close').addEventListener('click', () => helpDialog.close());
 $('#help-done').addEventListener('click', () => helpDialog.close());
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') { placingType = null; renderPalette(); selectPlace(null); }
-  if ((event.key === 'Delete' || event.key === 'Backspace') && selectedPlaceId && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) deletePlace();
+  if (event.key === 'Escape') { placingType = null; connectMode = false; connectFromId = null; updateConnectUI(); renderPalette(); selectPlace(null); }
+  if ((event.key === 'Delete' || event.key === 'Backspace') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+    if (selectedRouteId) deleteRoute(); else if (selectedPlaceId) deletePlace();
+  }
 });
 window.addEventListener('resize', () => renderCamera());
 
