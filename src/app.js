@@ -1,6 +1,7 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
 import { canGenerate, planDetails } from './generator.js';
+import { artworkForPlace, artworkForBoard } from './cartography.js';
 const STORAGE_KEY = 'mapmaker3000.atlas.v1';
 const TYPES = {
   world: { label: 'World', icon: '✧', color: '#806b4e', bg: '#f3ead6' },
@@ -34,7 +35,7 @@ const els = {
   inspector: $('#inspector'), inspectorHeading: $('#inspector-heading'), inspectorEmpty: $('#inspector-empty'), inspectorForm: $('#inspector-form'),
   name: $('#place-name'), type: $('#place-type'), description: $('#place-description'), notes: $('#place-notes'), enter: $('#enter-place'),
   zoomLabel: $('#zoom-label'), hint: $('#empty-hint'), saveStatus: $('#save-status'), toast: $('#toast'), importInput: $('#import-input'),
-  routesLayer: $('#routes-layer'), connect: $('#connect-places'), connectInstructions: $('#connect-instructions'),
+  routesLayer: $('#routes-layer'), terrainLayer: $('#terrain-layer'), connect: $('#connect-places'), connectInstructions: $('#connect-instructions'),
   inspectorKind: $('#inspector-kind'), routeForm: $('#route-form'), routeName: $('#route-name'), routeType: $('#route-type'),
   routeDescription: $('#route-description'), routeNotes: $('#route-notes'),
   generateButton: $('#generate-details'), generatorDialog: $('#generator-dialog'), generatorTitle: $('#generator-title'),
@@ -129,6 +130,7 @@ let layoutDirty = false;
 let paintQueued = false;
 let visibleCards = new Map();
 let visibleRoutes = new Map();
+let visibleBoards = new Map();
 let flyAnimation = null;
 let generatorBoardId = null;
 
@@ -261,6 +263,7 @@ function renderPlaces() {
   layoutDirty = false;
   els.layer.replaceChildren(); visibleCards = new Map();
   els.routesLayer.replaceChildren(); visibleRoutes = new Map();
+  els.terrainLayer.replaceChildren(); visibleBoards = new Map();
   renderCamera();
 }
 function contextBoardAt(point, depth) {
@@ -292,13 +295,10 @@ function makeCard(id) {
   const item = place(id), card = document.createElement('div');
   card.className = `place-card${id === selectedPlaceId ? ' selected' : ''}`;
   card.dataset.type = item.type; card.dataset.placeId = id;
-  card.style.setProperty('--icon-bg', TYPES[item.type].bg);
-  card.style.setProperty('--icon-color', TYPES[item.type].color);
-  const icon = document.createElement('span'); icon.className = 'card-icon'; icon.textContent = TYPES[item.type].icon;
-  const title = document.createElement('span'); title.className = 'card-title'; title.textContent = item.name;
-  const meta = document.createElement('span'); meta.className = 'card-meta'; meta.textContent = TYPES[item.type].label;
-  const enter = document.createElement('span'); enter.className = 'card-enter'; enter.textContent = ENTERABLE.has(item.type) ? '↘' : '';
-  card.append(icon, title, meta, enter);
+  card.innerHTML = artworkForPlace(item);
+  const title = document.createElement('span'); title.className = 'map-label'; title.textContent = item.name;
+  card.append(title);
+  card.setAttribute('role', 'button'); card.setAttribute('aria-label', `${TYPES[item.type].label}: ${item.name}`);
   return card;
 }
 function makeRouteNode(id) {
@@ -325,8 +325,24 @@ function paintVisible() {
   };
   const wanted = new Set();
   const wantedRoutes = new Set();
+  const wantedBoards = new Set();
   for (const [depth, opacity] of depths) {
     if (opacity < 0.015) continue;
+    for (const [boardId, rect] of layout.boards) {
+      if (rect.depth !== depth || !['town', 'village', 'house'].includes(atlas.boards[boardId]?.kind)) continue;
+      if (rect.x > view.right || rect.y > view.bottom || rect.x + rect.width < view.left || rect.y + rect.height < view.top) continue;
+      wantedBoards.add(boardId);
+      let terrain = visibleBoards.get(boardId);
+      if (!terrain) {
+        terrain = document.createElement('div'); terrain.className = 'terrain-map';
+        terrain.innerHTML = artworkForBoard(atlas.boards[boardId], atlas);
+        visibleBoards.set(boardId, terrain); els.terrainLayer.append(terrain);
+      }
+      terrain.style.left = `${camera.x + rect.x * camera.scale}px`;
+      terrain.style.top = `${camera.y + rect.y * camera.scale}px`;
+      terrain.style.transform = `scale(${camera.scale * rect.scale})`;
+      terrain.style.opacity = opacity;
+    }
     for (const id of nearbyRoutes(layout, depth, view, 240 / camera.scale)) {
       const rect = layout.routes.get(id); wantedRoutes.add(id);
       let group = visibleRoutes.get(id);
@@ -362,6 +378,9 @@ function paintVisible() {
   }
   for (const [id, group] of visibleRoutes) {
     if (!wantedRoutes.has(id)) { group.remove(); visibleRoutes.delete(id); }
+  }
+  for (const [id, terrain] of visibleBoards) {
+    if (!wantedBoards.has(id)) { terrain.remove(); visibleBoards.delete(id); }
   }
   refreshContext();
 }

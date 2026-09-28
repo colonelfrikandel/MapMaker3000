@@ -69,13 +69,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 /* Cartographic canvas */
 .canvas-wrap { position: relative; flex: 1; min-height: 0; margin: 0 17px 17px; overflow: hidden; border: 8px solid #3c3329; outline: 1px solid #715b3d; border-radius: 3px; cursor: grab; touch-action: none;
-  background-color: #cbb997; background-image: radial-gradient(ellipse at 13% 12%, #ecdcbc 0%, transparent 45%), radial-gradient(ellipse at 86% 77%, #af9e7c 0%, transparent 42%), repeating-linear-gradient(0deg, #4b46331a 0px, #4b46331a 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, #4b46331a 0px, #4b46331a 1px, transparent 1px, transparent 32px); }
+  background-color: #b8c3b3; background-image: radial-gradient(ellipse at 13% 12%, #d4d9be 0%, transparent 45%), radial-gradient(ellipse at 86% 77%, #93aba7 0%, transparent 42%), repeating-linear-gradient(0deg, #4b46330b 0px, #4b46330b 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, #4b46330b 0px, #4b46330b 1px, transparent 1px, transparent 32px); }
+.canvas-wrap[data-map-kind='world'] { background-color: #93adb2; background-image: radial-gradient(ellipse at 24% 20%, #b9c7be 0%, transparent 50%), radial-gradient(ellipse at 76% 88%, #779ca9 0%, transparent 52%), repeating-linear-gradient(0deg, #315b6212 0px, #315b6212 1px, transparent 1px, transparent 36px), repeating-linear-gradient(90deg, #315b6212 0px, #315b6212 1px, transparent 1px, transparent 36px); }
 .canvas-wrap::after { content: '✦\A N'; white-space: pre; position: absolute; top: 15px; right: 17px; width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid #654c36a6; border-radius: 50%; color: #664d36; font: 700 17px/1.05 Cinzel, Georgia, serif; text-align: center; pointer-events: none; opacity: .78; }
 .canvas-wrap.panning, .canvas-wrap.dragging-place { cursor: grabbing; }
 .canvas-wrap.placing { cursor: crosshair; }
 .canvas-wrap.connecting { cursor: crosshair; }
 .canvas-wrap[data-map-kind='house'] { background-color: #c6b395; background-image: repeating-linear-gradient(0deg, #765f3a38 0px, #765f3a38 1px, transparent 1px, transparent 38px), repeating-linear-gradient(90deg, #765f3a38 0px, #765f3a38 1px, transparent 1px, transparent 38px); }
+.canvas-wrap[data-map-kind='town'], .canvas-wrap[data-map-kind='village'] { background-color: #c9c7a9; background-image: radial-gradient(ellipse at 45% 40%, #e2d9b8, transparent 70%), repeating-linear-gradient(0deg, #685f4220 0px, #685f4220 1px, transparent 1px, transparent 38px), repeating-linear-gradient(90deg, #685f4220 0px, #685f4220 1px, transparent 1px, transparent 38px); }
 .map-canvas { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
+.terrain-layer { position: absolute; inset: 0; pointer-events: none; }
+.terrain-map { position: absolute; width: 1010px; height: 630px; transform-origin: 0 0; }
+.terrain-map svg { width: 100%; height: 100%; display: block; }
 .routes-layer { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .route-line { fill: none; stroke: #704c30; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 1px 1px #f6e6bd); }
 .route-group[data-type='trail'] .route-line { stroke: #876744; stroke-dasharray: 7 6; }
@@ -88,29 +93,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .route-group.generated:hover .route-label, .route-group.generated.selected .route-label { display: block; }
 .route-hit { fill: none; stroke: transparent; stroke-width: 20; pointer-events: stroke; cursor: pointer; }
 .route-label { fill: #503b2d; stroke: #ead8af; stroke-width: 3; paint-order: stroke; font: 700 12px Cinzel, Georgia, serif; text-anchor: middle; pointer-events: none; }
-.map-decor { position: absolute; border: 2px dotted #89745370; border-radius: 54% 46% 61% 39%; background: #a2a17a38; pointer-events: none; opacity: var(--decor-opacity, 1); }
-.map-decor-one { width: 410px; height: 270px; left: 130px; top: 95px; transform: rotate(-21deg); }
-.map-decor-two { width: 340px; height: 240px; left: 520px; top: 390px; transform: rotate(17deg); background: #7b8b6d35; }
-.map-decor-three { width: 200px; height: 160px; left: -80px; top: 470px; }
-.canvas-wrap[data-map-kind='house'] .map-decor, .canvas-wrap[data-map-kind='town'] .map-decor, .canvas-wrap[data-map-kind='village'] .map-decor { display: none; }
 .places-layer { position: absolute; inset: 0; pointer-events: none; }
-.place-card { position: absolute; width: 152px; min-height: 98px; display: flex; flex-direction: column; align-items: flex-start; padding: 11px 12px 10px; color: #443727; border: 1px solid #7c6549; border-radius: 3px; background: linear-gradient(135deg, #eee1c2, #e1cfaa); box-shadow: 0 3px 7px #4d382f48, inset 0 0 0 3px #eadcbb; pointer-events: auto; cursor: grab; user-select: none; transform-origin: 0 0; }
-.place-card:hover { box-shadow: 0 5px 14px #48332272, inset 0 0 0 3px #eadcbb; border-color: #7d292b; }
-.place-card.selected { border: 2px solid #9a302e; box-shadow: 0 0 0 3px #c4aa79, 0 6px 18px #48332269; }
-.place-card.connect-source { outline: 4px solid #bb6a3d; outline-offset: 3px; }
+.place-card { position: absolute; width: 152px; height: 98px; color: #403829; pointer-events: auto; cursor: grab; user-select: none; transform-origin: 0 0; }
+.place-art { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 2px 2px #3a342833); }
+.place-card:hover .place-art { filter: drop-shadow(0 2px 2px #3a342855) drop-shadow(0 0 5px #fff0bd); }
+.place-card.selected .place-art, .place-card.connect-source .place-art { filter: drop-shadow(0 0 4px #a3322d) drop-shadow(0 0 7px #f5d4a1); }
 .place-card.dragging { cursor: grabbing; }
-.card-icon { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid #92754e; border-radius: 50%; color: #714c2f; font-size: 15px; }
-.card-title { display: block; max-width: 100%; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px Cinzel, Georgia, serif; }
-.card-meta { margin-top: 3px; color: #806a4f; font-size: 10px; text-transform: uppercase; letter-spacing: .09em; }
-.card-enter { position: absolute; top: 10px; right: 10px; color: #965f38; font-size: 14px; }
-.place-card[data-type='continent'] { width: 250px; min-height: 178px; justify-content: center; align-items: center; padding: 17px; border: 2px solid #695b3c; border-radius: 39% 61% 46% 54% / 51% 41% 59% 49%; background: radial-gradient(ellipse at 32% 28%, #ead8a5, #b0a074 80%); box-shadow: 0 7px 0 #6e654746, 0 16px 30px #34251837, inset 0 0 18px #eee0b685; text-align: center; }
-.place-card[data-type='continent'] .card-icon { width: 39px; height: 39px; font-size: 21px; }
-.place-card[data-type='continent'] .card-title { font-size: 17px; margin-top: 10px; }
-.place-card[data-type='continent'] .card-meta { font-size: 10px; }
-.place-card[data-type='continent'] .card-enter { top: 38px; right: 45px; }
-.place-card[data-type='province'], .place-card[data-type='region'] { width: 205px; min-height: 125px; border-radius: 8px 21px 7px 16px; background: linear-gradient(140deg, #eadbb6, #c7b58b); }
-.place-card[data-type='room'] { width: 180px; min-height: 135px; border: 4px double #71583a; border-radius: 0; background: #d5be97; box-shadow: 5px 5px 0 #59452f59; }
-.place-card[data-type='room'] .card-icon { border-radius: 0; }
+.map-label { position: absolute; left: 50%; bottom: 1px; max-width: 96%; transform: translateX(-50%); padding: 2px 5px; background: #eee2c8dc; border: 1px solid #796d5199; color: #463c2b; font: 700 11px/1.2 Cinzel, Georgia, serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; box-shadow: 0 1px 2px #4b3b2a38; }
+.place-card[data-type='continent'] { width: 250px; height: 178px; }
+.place-card[data-type='continent'] .map-label { bottom: 16px; font-size: 15px; }
+.place-card[data-type='province'], .place-card[data-type='region'] { width: 205px; height: 125px; }
+.place-card[data-type='room'] { width: 180px; height: 135px; }
+.place-card[data-type='room'] .map-label { bottom: 19px; background: #eadbbdbb; border-color: transparent; font-size: 10px; }
 .canvas-tip { position: absolute; left: 15px; bottom: 13px; max-width: calc(100% - 220px); color: #574630; background: #e7d7b7e8; border: 1px solid #a58b63; padding: 6px 10px; font-size: 10px; font-weight: 700; pointer-events: none; }
 .canvas-tip span { padding: 0 5px; color: #9e382f; }
 .zoom-controls { position: absolute; right: 13px; bottom: 12px; display: flex; align-items: center; background: #302720; border: 1px solid #8c6d47; box-shadow: 0 3px 8px #2e1d1559; }
