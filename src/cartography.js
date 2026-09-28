@@ -1,6 +1,7 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 // Deterministic, code-native map artwork. All SVG strings contain generated numbers only.
 import { cardSize } from './geometry.js';
+import { townBaseSvg } from './watabou.js';
 
 function hash(value) {
   let h = 2166136261;
@@ -117,6 +118,7 @@ export function artworkForPlace(item) {
 
 export function artworkForBoard(board, atlas) {
   if (!['town', 'village', 'house'].includes(board.kind)) return '';
+  if (board.baseMap && (board.kind === 'town' || board.kind === 'village')) return townBaseSvg(board.baseMap);
   const rand = random(hash(`${board.kind}:${board.name}`));
   if (board.kind === 'house') {
     let floor = `<rect x="76" y="51" width="858" height="526" fill="#c6b18d" stroke="#5c4b37" stroke-width="15"/>`;

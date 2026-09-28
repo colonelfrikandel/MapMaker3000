@@ -2,6 +2,7 @@
 import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
 import { canGenerate, planDetails } from './generator.js';
 import { artworkForPlace, artworkForBoard } from './cartography.js';
+import { normalizeWatabouTown, validateTownBase, nearestTownFootprint } from './watabou.js';
 const STORAGE_KEY = 'mapmaker3000.atlas.v1';
 const TYPES = {
   world: { label: 'World', icon: '✧', color: '#806b4e', bg: '#f3ead6' },
@@ -41,6 +42,7 @@ const els = {
   generateButton: $('#generate-details'), generatorDialog: $('#generator-dialog'), generatorTitle: $('#generator-title'),
   generatorIntro: $('#generator-intro'), generatorSeed: $('#generator-seed'), generatorSize: $('#generator-size'),
   generatorPreview: $('#generator-preview'), generatorMapPreview: $('#generator-map-preview'), generatorApply: $('#generator-apply'),
+  importTownBase: $('#import-town-base'), townBaseInput: $('#town-base-input'),
 };
 
 function id() { return crypto.randomUUID(); }
@@ -96,9 +98,11 @@ function validateAtlas(value) {
       !value.boards[value.rootBoardId] || !Array.isArray(value.boards[value.rootBoardId].placeIds)) throw new Error('Unsupported atlas file');
   for (const board of Object.values(value.boards)) {
     if (!board || typeof board.name !== 'string' || !Array.isArray(board.placeIds)) throw new Error('Invalid map data');
+    if (board.baseMap) validateTownBase(board.baseMap);
     for (const placeId of board.placeIds) {
       const place = value.places[placeId];
       if (!place || place.boardId !== board.id || !Object.hasOwn(TYPES, place.type) || !Number.isFinite(place.x) || !Number.isFinite(place.y)) throw new Error('Invalid place data');
+      if (place.baseFootprintIndex != null && (!board.baseMap || !Number.isInteger(place.baseFootprintIndex) || place.baseFootprintIndex < 0 || place.baseFootprintIndex >= board.baseMap.layers.buildings.length)) throw new Error('Invalid notable building');
     }
   }
   value.sessions ||= {};
@@ -242,7 +246,7 @@ function renderPalette() {
     const button = document.createElement('button'); button.className = `palette-item${placingType === type ? ' active' : ''}`;
     button.draggable = true; button.dataset.type = type;
     const icon = document.createElement('span'); icon.className = 'palette-icon'; icon.textContent = TYPES[type].icon; icon.style.color = TYPES[type].color;
-    const label = document.createElement('span'); label.textContent = TYPES[type].label;
+    const label = document.createElement('span'); label.textContent = board().baseMap && type === 'house' ? 'Notable house' : TYPES[type].label;
     button.append(icon, label);
     button.addEventListener('click', () => { placingType = placingType === type ? null : type; connectMode = false; connectFromId = null; updateConnectUI(); renderPalette(); });
     button.addEventListener('dragstart', (event) => { event.dataTransfer.setData('text/mapmaker-place', type); event.dataTransfer.effectAllowed = 'copy'; });
@@ -289,13 +293,15 @@ function refreshContext() {
     if (connectFromId && place(connectFromId)?.boardId !== next) { connectFromId = null; updateConnectUI(); }
     renderNavigation(); renderPalette(); renderInspector(); renderHeader();
   }
-  els.hint.hidden = board().placeIds.length > 0;
+  els.hint.hidden = board().placeIds.length > 0 || !!board().baseMap;
 }
 function makeCard(id) {
   const item = place(id), card = document.createElement('div');
   card.className = `place-card${id === selectedPlaceId ? ' selected' : ''}`;
   card.dataset.type = item.type; card.dataset.placeId = id;
-  card.innerHTML = artworkForPlace(item);
+  const notableOnBase = item.type === 'house' && !!atlas.boards[item.boardId]?.baseMap;
+  if (notableOnBase) card.classList.add('map-notable');
+  card.innerHTML = notableOnBase ? '<svg class="place-art" viewBox="0 0 152 98" aria-hidden="true"><path d="M76 20c-12 0-21 9-21 21 0 17 21 38 21 38s21-21 21-38c0-12-9-21-21-21Z" fill="#863a32" stroke="#f2dbaf" stroke-width="3"/><circle cx="76" cy="41" r="8" fill="#f5e2b8"/></svg>' : artworkForPlace(item);
   const title = document.createElement('span'); title.className = 'map-label'; title.textContent = item.name;
   card.append(title);
   card.setAttribute('role', 'button'); card.setAttribute('aria-label', `${TYPES[item.type].label}: ${item.name}`);
@@ -416,8 +422,9 @@ function renderHeader() {
   els.title.textContent = board().name;
   els.kind.textContent = `${TYPES[board().kind]?.label || 'Map'} map`.toUpperCase();
   els.wrap.dataset.mapKind = board().kind;
-  els.subtitle.textContent = 'Scroll to reveal detail across the atlas. Drag to visit neighboring places.';
-  els.generateButton.hidden = !canGenerate(board().kind);
+  els.subtitle.textContent = board().baseMap ? 'Town base imported. Add a notable house by choosing a building footprint.' : 'Scroll to reveal detail across the atlas. Drag to visit neighboring places.';
+  els.generateButton.hidden = !canGenerate(board().kind) || !!board().baseMap;
+  els.importTownBase.hidden = !['town', 'village'].includes(board().kind);
 }
 function render() { renderNavigation(); renderPalette(); renderPlaces(); renderInspector(); renderHeader(); renderCamera(); }
 function selectPlace(pid) {
@@ -433,11 +440,12 @@ function selectRoute(id) {
   for (const group of visibleRoutes.values()) group.classList.toggle('selected', group.dataset.routeId === id);
   renderInspector();
 }
-function addPlace(type, x, y, boardId = currentBoardId) {
+function addPlace(type, x, y, boardId = currentBoardId, footprintIndex = null) {
   if (!TYPES[type]) return;
   const targetBoard = atlas.boards[boardId]; if (!targetBoard || !(PALETTES[targetBoard.kind] || []).includes(type)) return;
   currentBoardId = boardId;
   const item = makePlace(boardId, type, DEFAULT_NAMES[type] || 'New place', Math.round(x), Math.round(y));
+  if (footprintIndex !== null) item.baseFootprintIndex = footprintIndex;
   atlas.places[item.id] = item; targetBoard.placeIds.push(item.id); placingType = null;
   if (ENTERABLE.has(type)) { const child = makeBoard(item.name, type, item.id); atlas.boards[child.id] = child; item.childBoardId = child.id; }
   render(); selectPlace(item.id); scheduleSave(); toast(`${TYPES[type].label} added`);
@@ -564,11 +572,21 @@ function addAtScreen(type, clientX, clientY) {
   const boardId = contextBoardAt(world, depth), rect = layout.boards.get(boardId);
   if (!rect) return;
   const [width, height] = cardSize(type);
-  addPlace(type, (world.x - rect.x) / rect.scale - width / 2, (world.y - rect.y) / rect.scale - height / 2, boardId);
+  let localX = (world.x - rect.x) / rect.scale, localY = (world.y - rect.y) / rect.scale;
+  let footprintIndex = null;
+  if (type === 'house' && atlas.boards[boardId]?.baseMap) {
+    const footprint = nearestTownFootprint(atlas.boards[boardId].baseMap, { x: localX, y: localY });
+    if (!footprint) { toast('Choose a building footprint for this notable house'); return; }
+    const marked = atlas.boards[boardId].placeIds.some(pid => place(pid)?.baseFootprintIndex === footprint.index);
+    if (marked) { toast('This building is already marked as notable'); return; }
+    localX = footprint.x; localY = footprint.y; footprintIndex = footprint.index;
+  }
+  addPlace(type, localX - width / 2, localY - height / 2, boardId, footprintIndex);
 }
 els.wrap.addEventListener('pointerdown', (event) => {
   if (event.button !== 0 || event.target.closest('.zoom-controls')) return;
   if (flyAnimation) { cancelAnimationFrame(flyAnimation); flyAnimation = null; }
+  if (placingType) { addAtScreen(placingType, event.clientX, event.clientY); return; }
   const hitRoute = event.target.closest('.route-hit');
   if (hitRoute) { if (!connectMode) selectRoute(hitRoute.parentElement.dataset.routeId); return; }
   const card = event.target.closest('.place-card') || cardAtPoint(event.clientX, event.clientY);
@@ -583,7 +601,6 @@ els.wrap.addEventListener('pointerdown', (event) => {
     selectPlace(item.id);
     gesture = { kind: 'place', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: item.x, y: item.y, item, card, moved: false };
   } else if (!event.target.closest('.canvas-tip')) {
-    if (placingType) { addAtScreen(placingType, event.clientX, event.clientY); return; }
     if (!connectMode) selectPlace(null);
     gesture = { kind: 'pan', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: camera.x, y: camera.y };
     els.wrap.classList.add('panning');
@@ -609,6 +626,21 @@ els.wrap.addEventListener('pointermove', (event) => {
 function endGesture(event) {
   if (!gesture || gesture.pointerId !== event.pointerId) return;
   if (gesture.kind === 'place' && gesture.moved) {
+    const baseMap = atlas.boards[gesture.item.boardId]?.baseMap;
+    if (gesture.item.type === 'house' && baseMap) {
+      const [width, height] = cardSize('house');
+      const footprint = nearestTownFootprint(baseMap, { x: gesture.item.x + width/2, y: gesture.item.y + height/2 }, 30);
+      const marked = footprint && atlas.boards[gesture.item.boardId].placeIds.some(pid => pid !== gesture.item.id && place(pid)?.baseFootprintIndex === footprint.index);
+      if (!footprint || marked) {
+        gesture.item.x = gesture.x; gesture.item.y = gesture.y;
+        toast(marked ? 'This building is already marked as notable' : 'Choose a building footprint for this notable house');
+      } else {
+        gesture.item.x = Math.round(footprint.x-width/2);
+        gesture.item.y = Math.round(footprint.y-height/2);
+        gesture.item.baseFootprintIndex = footprint.index;
+      }
+      layoutDirty = true;
+    }
     const terrain = visibleBoards.get(gesture.item.boardId);
     if (terrain) { terrain.remove(); visibleBoards.delete(gesture.item.boardId); }
     renderCamera(); scheduleSave();
@@ -685,7 +717,7 @@ $('#delete-place').addEventListener('click', deletePlace);
 $('#close-inspector').addEventListener('click', () => selectPlace(null));
 $('#add-place').addEventListener('click', () => { els.palette.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); toast('Choose a place from the left, then click the map'); });
 els.generateButton.addEventListener('click', () => {
-  if (!canGenerate(board().kind)) return;
+  if (!canGenerate(board().kind) || board().baseMap) return;
   generatorBoardId = currentBoardId;
   els.generatorTitle.textContent = board().kind === 'house' ? `Fill ${board().name} with rooms` : `Grow ${board().name}`;
   els.generatorIntro.textContent = board().kind === 'house' ?
@@ -694,6 +726,22 @@ els.generateButton.addEventListener('click', () => {
   els.generatorSeed.value = crypto.randomUUID().slice(0, 8);
   els.generatorSize.value = 'standard';
   updateGeneratorPreview(); els.generatorDialog.showModal(); els.generatorSeed.focus();
+});
+els.importTownBase.addEventListener('click', () => els.townBaseInput.click());
+els.townBaseInput.addEventListener('change', async () => {
+  const file = els.townBaseInput.files?.[0]; if (!file) return;
+  const target = board();
+  try {
+    if (!['town', 'village'].includes(target.kind)) throw new Error('Open a town or village first');
+    if (file.size > 6_000_000) throw new Error('Town file is too large');
+    const base = normalizeWatabouTown(JSON.parse(await file.text()));
+    if (target.baseMap && !confirm('Replace the current town base? Named places and notes will remain.')) return;
+    if (target.baseMap) for (const pid of target.placeIds) delete atlas.places[pid]?.baseFootprintIndex;
+    target.baseMap = base;
+    renderPlaces(); renderHeader(); renderPalette(); scheduleSave();
+    toast(`Town base imported: ${base.layers.buildings.length} building footprints`);
+  } catch (error) { toast(error.message || 'Could not import this town'); }
+  finally { els.townBaseInput.value = ''; }
 });
 els.generatorSeed.addEventListener('input', updateGeneratorPreview);
 els.generatorSize.addEventListener('change', updateGeneratorPreview);
