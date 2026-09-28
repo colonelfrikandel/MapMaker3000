@@ -67,13 +67,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .canvas-wrap.placing { cursor: crosshair; }
 .canvas-wrap[data-map-kind='house'] { background-color: #c6b395; background-image: repeating-linear-gradient(0deg, #765f3a38 0px, #765f3a38 1px, transparent 1px, transparent 38px), repeating-linear-gradient(90deg, #765f3a38 0px, #765f3a38 1px, transparent 1px, transparent 38px); }
 .map-canvas { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
-.map-decor { position: absolute; border: 2px dotted #89745370; border-radius: 54% 46% 61% 39%; background: #a2a17a38; pointer-events: none; }
+.map-decor { position: absolute; border: 2px dotted #89745370; border-radius: 54% 46% 61% 39%; background: #a2a17a38; pointer-events: none; opacity: var(--decor-opacity, 1); }
 .map-decor-one { width: 410px; height: 270px; left: 130px; top: 95px; transform: rotate(-21deg); }
 .map-decor-two { width: 340px; height: 240px; left: 520px; top: 390px; transform: rotate(17deg); background: #7b8b6d35; }
 .map-decor-three { width: 200px; height: 160px; left: -80px; top: 470px; }
 .canvas-wrap[data-map-kind='house'] .map-decor, .canvas-wrap[data-map-kind='town'] .map-decor, .canvas-wrap[data-map-kind='village'] .map-decor { display: none; }
 .places-layer { position: absolute; inset: 0; pointer-events: none; }
-.place-card { position: absolute; width: 152px; min-height: 98px; display: flex; flex-direction: column; align-items: flex-start; padding: 11px 12px 10px; color: #443727; border: 1px solid #7c6549; border-radius: 3px; background: linear-gradient(135deg, #eee1c2, #e1cfaa); box-shadow: 0 3px 7px #4d382f48, inset 0 0 0 3px #eadcbb; pointer-events: auto; cursor: grab; user-select: none; }
+.place-card { position: absolute; width: 152px; min-height: 98px; display: flex; flex-direction: column; align-items: flex-start; padding: 11px 12px 10px; color: #443727; border: 1px solid #7c6549; border-radius: 3px; background: linear-gradient(135deg, #eee1c2, #e1cfaa); box-shadow: 0 3px 7px #4d382f48, inset 0 0 0 3px #eadcbb; pointer-events: auto; cursor: grab; user-select: none; transform-origin: 0 0; }
 .place-card:hover { box-shadow: 0 5px 14px #48332272, inset 0 0 0 3px #eadcbb; border-color: #7d292b; }
 .place-card.selected { border: 2px solid #9a302e; box-shadow: 0 0 0 3px #c4aa79, 0 6px 18px #48332269; }
 .place-card.dragging { cursor: grabbing; }
@@ -94,7 +94,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .zoom-controls { position: absolute; right: 13px; bottom: 12px; display: flex; align-items: center; background: #302720; border: 1px solid #8c6d47; box-shadow: 0 3px 8px #2e1d1559; }
 .zoom-controls button { width: 32px; height: 30px; border: 0; background: none; color: #f0ddba; font-size: 17px; }
 .zoom-controls button:hover { background: #5b3d2a; }
-.zoom-controls span { min-width: 44px; text-align: center; font-size: 10px; color: #e4cdab; }
+.zoom-controls span { min-width: 105px; text-align: center; font-size: 9px; color: #e4cdab; letter-spacing: .04em; }
 .zoom-controls .reset-button { border-left: 1px solid #685037; }
 .empty-hint { position: absolute; left: 50%; top: 45%; width: 260px; transform: translate(-50%, -50%); text-align: center; color: #705a3a; pointer-events: none; }
 .empty-hint span { font-size: 32px; }

@@ -16,7 +16,7 @@
           <div id="board-tree" class="board-tree"></div>
           <div class="section-heading palette-heading"><span>MAP ELEMENTS</span><small>Drag or click</small></div>
           <div id="palette" class="palette"></div>
-          <div class="help-card"><span class="help-icon">✥</span><strong>Follow the map</strong><p>Scroll over a place to descend through the atlas. Scroll out to return to the wider world.</p></div>
+          <div class="help-card"><span class="help-icon">✥</span><strong>Follow the map</strong><p>Scroll smoothly for more detail. Drag sideways to explore neighboring lands at the same scale.</p></div>
         </div>
         <div class="sidebar-footer"><span class="save-dot"></span><span id="save-status">Saved in this browser</span></div>
       </aside>
@@ -35,7 +35,7 @@
         </header>
 
         <div class="map-header">
-          <div><div class="eyebrow" id="map-kind">WORLD MAP</div><h1 id="map-title">The Shattered Realm</h1><p id="map-subtitle">Scroll over a continent to journey inside.</p></div>
+          <div><div class="eyebrow" id="map-kind">WORLD MAP</div><h1 id="map-title">The Shattered Realm</h1><p id="map-subtitle">Scroll for more detail. Drag to explore neighboring lands.</p></div>
           <div class="map-header-actions"><button id="add-place" class="primary-button">＋ Add to map</button></div>
         </div>
 
@@ -45,7 +45,7 @@
             <div id="places-layer" class="places-layer"></div>
           </div>
           <div id="empty-hint" class="empty-hint" hidden><span>✧</span><strong>This map is waiting for a story</strong><p>Choose a place from the left, then click anywhere to add it.</p></div>
-          <div class="canvas-tip">✥ Drag to pan <span>·</span> Scroll over a place to descend <span>·</span> Scroll out to ascend</div>
+          <div class="canvas-tip">✥ Drag to pan <span>·</span> Scroll to change detail <span>·</span> Pan across neighboring places</div>
           <div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom-label">100%</span><button id="zoom-in" aria-label="Zoom in">＋</button><button id="zoom-reset" class="reset-button" title="Reset view" aria-label="Reset view">⌖</button></div>
         </div>
       </main>
@@ -65,7 +65,7 @@
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <dialog id="help-dialog"><div class="dialog-top"><span class="eyebrow">CARTOGRAPHER'S GUIDE</span><button id="help-close" class="icon-button" aria-label="Close help">×</button></div><h2>Explore from realm to room.</h2><p>Scroll over a continent to reveal its provinces. Keep scrolling over a province, settlement, then house to reach its rooms. Scroll out to climb back through the atlas. You can also double-click a place or use the atlas list.</p><p>Choose an element from the left and click the map, or drag it onto the canvas. Drag existing places to move them. Your atlas saves in this browser; export a JSON backup to keep or transfer it.</p><button id="help-done" class="primary-button">Return to atlas</button></dialog>
+    <dialog id="help-dialog"><div class="dialog-top"><span class="eyebrow">CARTOGRAPHER'S GUIDE</span><button id="help-close" class="icon-button" aria-label="Close help">×</button></div><h2>Explore from realm to room.</h2><p>Scroll to move smoothly between world, continent, province, settlement, and house detail. The same detail level opens across the whole atlas, so drag sideways to explore neighboring places. Scroll out to reverse the journey. Double-click a place or use the atlas list to fly there.</p><p>Choose an element from the left and click the map, or drag it onto the canvas. Drag existing places to move them. Your atlas saves in this browser; export a JSON backup to keep or transfer it.</p><button id="help-done" class="primary-button">Return to atlas</button></dialog>
     <script type="module" src="./src/app.js"></script>
   </body>
 </html>

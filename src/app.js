@@ -1,4 +1,5 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
+import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
 const STORAGE_KEY = 'mapmaker3000.atlas.v1';
 const TYPES = {
   world: { label: 'World', icon: '✧', color: '#806b4e', bg: '#f3ead6' },
@@ -97,13 +98,12 @@ let camera = { x: 0, y: 0, scale: 1 };
 let gesture = null;
 let saveTimer = null;
 let toastTimer = null;
-let wheelIdleTimer = null;
-let wheelChangedLevel = false;
-let wheelDistance = 0;
-let wheelDirection = 0;
-let lastWheelAt = 0;
 let lastDragEnd = 0;
-const cameraByBoard = new Map();
+let layout = buildLayout(atlas);
+let layoutDirty = false;
+let paintQueued = false;
+let visibleCards = new Map();
+let flyAnimation = null;
 
 function board() { return atlas.boards[currentBoardId]; }
 function place(id) { return atlas.places[id]; }
@@ -127,61 +127,54 @@ function defaultCamera() {
     scale,
   };
 }
-function fitCamera(boardId) {
-  const target = atlas.boards[boardId];
-  if (!target?.placeIds.length) return defaultCamera();
-  const items = target.placeIds.map(place).filter(Boolean);
-  const left = Math.min(...items.map(item => item.x));
-  const top = Math.min(...items.map(item => item.y));
-  const right = Math.max(...items.map(item => item.x + (item.type === 'continent' ? 250 : item.type === 'province' || item.type === 'region' ? 205 : item.type === 'room' ? 180 : 152)));
-  const bottom = Math.max(...items.map(item => item.y + (item.type === 'continent' ? 178 : item.type === 'room' ? 135 : 125)));
-  const scale = Math.max(0.45, Math.min(1, (els.wrap.clientWidth - 70) / (right - left), (els.wrap.clientHeight - 70) / (bottom - top)));
-  return {
-    x: (els.wrap.clientWidth - (right + left) * scale) / 2,
-    y: (els.wrap.clientHeight - (bottom + top) * scale) / 2,
-    scale,
-  };
-}
+function baseScale() { return defaultCamera().scale; }
+function maxScale() { return baseScale() * ZOOM_STEP ** MAX_DEPTH; }
 function renderCamera() {
-  els.canvas.style.transform = `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`;
-  els.zoomLabel.textContent = `${Math.round(camera.scale * 100)}%`;
+  const depth = levelAtScale(camera.scale, baseScale());
+  const names = ['WORLD', 'CONTINENT', 'PROVINCE', 'SETTLEMENT', 'INTERIOR'];
+  const whole = Math.min(MAX_DEPTH, Math.floor(depth));
+  els.zoomLabel.textContent = whole === MAX_DEPTH ? names[MAX_DEPTH] : `${names[whole]} ${Math.round((depth - whole) * 100)}%`;
+  els.zoomLabel.title = `Detail level ${depth.toFixed(2)} of ${MAX_DEPTH}`;
+  els.wrap.style.setProperty('--decor-opacity', Math.max(0, 1 - depth * 2).toFixed(2));
+  if (!paintQueued) { paintQueued = true; requestAnimationFrame(paintVisible); }
 }
-function screenToMap(clientX, clientY) {
+function screenToWorld(clientX, clientY) {
   const rect = els.wrap.getBoundingClientRect();
   return { x: (clientX - rect.left - camera.x) / camera.scale, y: (clientY - rect.top - camera.y) / camera.scale };
 }
 function zoomAt(factor, clientX, clientY) {
-  const old = screenToMap(clientX, clientY);
-  camera.scale = Math.max(0.45, Math.min(2.2, camera.scale * factor));
+  if (flyAnimation) { cancelAnimationFrame(flyAnimation); flyAnimation = null; }
+  const old = screenToWorld(clientX, clientY);
+  camera.scale = Math.max(baseScale() * 0.65, Math.min(maxScale(), camera.scale * factor));
   const rect = els.wrap.getBoundingClientRect();
   camera.x = clientX - rect.left - old.x * camera.scale;
   camera.y = clientY - rect.top - old.y * camera.scale;
   renderCamera();
 }
-function findZoomTarget(point) {
-  let nearest = null; let best = Infinity;
-  for (const pid of board().placeIds) {
-    const item = place(pid); if (!item || !ENTERABLE.has(item.type)) continue;
-    const width = item.type === 'continent' ? 250 : item.type === 'province' || item.type === 'region' ? 205 : 152;
-    const centerX = item.x + width / 2, centerY = item.y + 60;
-    const distance = Math.hypot(point.x - centerX, point.y - centerY);
-    const reach = item.type === 'continent' ? 235 : item.type === 'province' || item.type === 'region' ? 180 : 105;
-    if (distance < reach && distance < best) { best = distance; nearest = item; }
-  }
-  return nearest;
-}
-function changeBoard(boardId, nextCamera = null) {
-  if (!atlas.boards[boardId]) return;
-  cameraByBoard.set(currentBoardId, { ...camera });
+function centerOnBoard(boardId, animate = true) {
+  const rect = layout.boards.get(boardId); if (!rect) return;
+  const targetScale = Math.min(maxScale(), baseScale() * ZOOM_STEP ** rect.depth);
+  const destination = {
+    scale: targetScale,
+    x: els.wrap.clientWidth / 2 - (rect.x + rect.width / 2) * targetScale,
+    y: els.wrap.clientHeight / 2 - (rect.y + rect.height / 2) * targetScale,
+  };
   currentBoardId = boardId; selectedPlaceId = null; placingType = null;
-  camera = nextCamera || cameraByBoard.get(boardId) || fitCamera(boardId);
-  render();
+  renderNavigation(); renderPalette(); renderInspector(); renderHeader();
+  if (!animate) { camera = destination; renderCamera(); return; }
+  const from = { ...camera }, started = performance.now();
+  if (flyAnimation) cancelAnimationFrame(flyAnimation);
+  function tick(now) {
+    const t = Math.min(1, (now - started) / 450), eased = t * t * (3 - 2 * t);
+    camera.scale = from.scale * (destination.scale / from.scale) ** eased;
+    camera.x = from.x + (destination.x - from.x) * eased;
+    camera.y = from.y + (destination.y - from.y) * eased;
+    renderCamera();
+    flyAnimation = t < 1 ? requestAnimationFrame(tick) : null;
+  }
+  flyAnimation = requestAnimationFrame(tick);
 }
-function zoomToParent() {
-  const parentPlace = place(board().parentPlaceId);
-  if (!parentPlace) return;
-  changeBoard(parentPlace.boardId, fitCamera(parentPlace.boardId));
-}
+function changeBoard(boardId) { centerOnBoard(boardId); }
 function boardAncestors() {
   const result = [];
   let next = board();
@@ -227,20 +220,80 @@ function renderPalette() {
   els.wrap.classList.toggle('placing', !!placingType);
 }
 function renderPlaces() {
-  els.layer.replaceChildren();
-  for (const pid of board().placeIds) {
-    const item = place(pid); if (!item) continue;
-    const card = document.createElement('div'); card.className = `place-card${pid === selectedPlaceId ? ' selected' : ''}`;
-    card.dataset.type = item.type;
-    card.dataset.placeId = pid; card.style.left = `${item.x}px`; card.style.top = `${item.y}px`;
-    card.style.setProperty('--icon-bg', TYPES[item.type].bg); card.style.setProperty('--icon-color', TYPES[item.type].color);
-    const icon = document.createElement('span'); icon.className = 'card-icon'; icon.textContent = TYPES[item.type].icon;
-    const title = document.createElement('span'); title.className = 'card-title'; title.textContent = item.name;
-    const meta = document.createElement('span'); meta.className = 'card-meta'; meta.textContent = TYPES[item.type].label;
-    const enter = document.createElement('span'); enter.className = 'card-enter'; enter.textContent = ENTERABLE.has(item.type) ? '↘' : '';
-    card.append(icon, title, meta, enter); els.layer.append(card);
+  layout = buildLayout(atlas);
+  layoutDirty = false;
+  els.layer.replaceChildren(); visibleCards = new Map();
+  renderCamera();
+}
+function contextBoardAt(point, depth) {
+  if (depth === 0) return atlas.rootBoardId;
+  let bestId = null, bestDistance = Infinity;
+  for (const [id, rect] of layout.boards) {
+    if (rect.depth !== depth) continue;
+    const dx = Math.max(rect.x - point.x, 0, point.x - rect.x - rect.width);
+    const dy = Math.max(rect.y - point.y, 0, point.y - rect.y - rect.height);
+    const distance = dx * dx + dy * dy;
+    if (distance < bestDistance) { bestDistance = distance; bestId = id; }
+  }
+  return bestId || currentBoardId;
+}
+function refreshContext() {
+  if (flyAnimation) return;
+  const level = levelAtScale(camera.scale, baseScale());
+  const depth = Math.min(MAX_DEPTH, Math.floor(level) + (blend(level % 1) > 0.5 ? 1 : 0));
+  const center = { x: (els.wrap.clientWidth / 2 - camera.x) / camera.scale, y: (els.wrap.clientHeight / 2 - camera.y) / camera.scale };
+  const next = contextBoardAt(center, depth);
+  if (next !== currentBoardId) {
+    currentBoardId = next; placingType = null;
+    renderNavigation(); renderPalette(); renderInspector(); renderHeader();
   }
   els.hint.hidden = board().placeIds.length > 0;
+}
+function makeCard(id) {
+  const item = place(id), card = document.createElement('div');
+  card.className = `place-card${id === selectedPlaceId ? ' selected' : ''}`;
+  card.dataset.type = item.type; card.dataset.placeId = id;
+  card.style.setProperty('--icon-bg', TYPES[item.type].bg);
+  card.style.setProperty('--icon-color', TYPES[item.type].color);
+  const icon = document.createElement('span'); icon.className = 'card-icon'; icon.textContent = TYPES[item.type].icon;
+  const title = document.createElement('span'); title.className = 'card-title'; title.textContent = item.name;
+  const meta = document.createElement('span'); meta.className = 'card-meta'; meta.textContent = TYPES[item.type].label;
+  const enter = document.createElement('span'); enter.className = 'card-enter'; enter.textContent = ENTERABLE.has(item.type) ? '↘' : '';
+  card.append(icon, title, meta, enter);
+  return card;
+}
+function paintVisible() {
+  paintQueued = false;
+  if (layoutDirty) { layout = buildLayout(atlas); layoutDirty = false; }
+  const level = levelAtScale(camera.scale, baseScale());
+  const lower = Math.floor(level), mix = blend(level - lower);
+  const depths = lower === MAX_DEPTH ? [[MAX_DEPTH, 1]] : [[lower, 1 - mix], [lower + 1, mix]];
+  const view = {
+    left: -camera.x / camera.scale, top: -camera.y / camera.scale,
+    right: (els.wrap.clientWidth - camera.x) / camera.scale,
+    bottom: (els.wrap.clientHeight - camera.y) / camera.scale,
+  };
+  const wanted = new Set();
+  for (const [depth, opacity] of depths) {
+    if (opacity < 0.015) continue;
+    for (const id of nearbyPlaces(layout, depth, view, 240 / camera.scale)) {
+      const rect = layout.places.get(id);
+      wanted.add(id);
+      let card = visibleCards.get(id);
+      if (!card) { card = makeCard(id); visibleCards.set(id, card); els.layer.append(card); }
+      const scale = camera.scale * rect.scale;
+      card.style.left = `${camera.x + rect.x * camera.scale}px`;
+      card.style.top = `${camera.y + rect.y * camera.scale}px`;
+      card.style.transform = `scale(${scale})`;
+      card.style.opacity = opacity;
+      card.style.zIndex = depth;
+      card.style.pointerEvents = opacity > 0.35 ? 'auto' : 'none';
+    }
+  }
+  for (const [id, card] of visibleCards) {
+    if (!wanted.has(id)) { card.remove(); visibleCards.delete(id); }
+  }
+  refreshContext();
 }
 function renderInspector() {
   const item = selectedPlaceId ? place(selectedPlaceId) : null;
@@ -250,7 +303,7 @@ function renderInspector() {
   if (!item) return;
   els.name.value = item.name; els.description.value = item.description || ''; els.notes.value = item.notes || '';
   els.type.replaceChildren();
-  for (const type of PALETTES[board().kind] || PALETTES.world) {
+  for (const type of PALETTES[atlas.boards[item.boardId]?.kind] || PALETTES.world) {
     const option = document.createElement('option'); option.value = type; option.textContent = TYPES[type].label; els.type.append(option);
   }
   if (![...els.type.options].some(option => option.value === item.type)) {
@@ -264,8 +317,7 @@ function renderHeader() {
   els.title.textContent = board().name;
   els.kind.textContent = `${TYPES[board().kind]?.label || 'Map'} map`.toUpperCase();
   els.wrap.dataset.mapKind = board().kind;
-  els.subtitle.textContent = board().kind === 'world' ? 'Scroll over a continent to journey inside.' :
-    board().kind === 'house' ? 'The final level: rooms and the stories within them.' : 'Scroll over a place to reveal the next level.';
+  els.subtitle.textContent = 'Scroll to reveal detail across the atlas. Drag to visit neighboring places.';
 }
 function render() { renderNavigation(); renderPalette(); renderPlaces(); renderInspector(); renderHeader(); renderCamera(); }
 function selectPlace(pid) {
@@ -273,10 +325,12 @@ function selectPlace(pid) {
   for (const card of els.layer.querySelectorAll('.place-card')) card.classList.toggle('selected', card.dataset.placeId === pid);
   renderInspector();
 }
-function addPlace(type, x, y) {
+function addPlace(type, x, y, boardId = currentBoardId) {
   if (!TYPES[type]) return;
-  const item = makePlace(currentBoardId, type, DEFAULT_NAMES[type] || 'New place', Math.round(x), Math.round(y));
-  atlas.places[item.id] = item; board().placeIds.push(item.id); placingType = null;
+  const targetBoard = atlas.boards[boardId]; if (!targetBoard || !(PALETTES[targetBoard.kind] || []).includes(type)) return;
+  currentBoardId = boardId;
+  const item = makePlace(boardId, type, DEFAULT_NAMES[type] || 'New place', Math.round(x), Math.round(y));
+  atlas.places[item.id] = item; targetBoard.placeIds.push(item.id); placingType = null;
   if (ENTERABLE.has(type)) { const child = makeBoard(item.name, type, item.id); atlas.boards[child.id] = child; item.childBoardId = child.id; }
   render(); selectPlace(item.id); scheduleSave(); toast(`${TYPES[type].label} added`);
   if (window.innerWidth > 1050) els.name.focus();
@@ -287,7 +341,7 @@ function enterPlace(target = null) {
     const child = makeBoard(item.name, item.type, item.id);
     atlas.boards[child.id] = child; item.childBoardId = child.id; scheduleSave();
   }
-  changeBoard(item.childBoardId, fitCamera(item.childBoardId));
+  centerOnBoard(item.childBoardId);
 }
 function deletePlace() {
   const item = place(selectedPlaceId); if (!item) return;
@@ -301,7 +355,7 @@ function deletePlace() {
     }
     delete atlas.places[pid];
   }
-  board().placeIds = board().placeIds.filter(pid => pid !== item.id);
+  atlas.boards[item.boardId].placeIds = atlas.boards[item.boardId].placeIds.filter(pid => pid !== item.id);
   removeDescendants(item.id); selectedPlaceId = null; render(); scheduleSave(); toast('Place deleted');
 }
 
@@ -312,15 +366,25 @@ function cardAtPoint(clientX, clientY) {
     return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
   }) || null;
 }
+function addAtScreen(type, clientX, clientY) {
+  const world = screenToWorld(clientX, clientY);
+  const depth = Math.min(MAX_DEPTH, Math.round(levelAtScale(camera.scale, baseScale())));
+  const boardId = contextBoardAt(world, depth), rect = layout.boards.get(boardId);
+  if (!rect) return;
+  const [width, height] = cardSize(type);
+  addPlace(type, (world.x - rect.x) / rect.scale - width / 2, (world.y - rect.y) / rect.scale - height / 2, boardId);
+}
 els.wrap.addEventListener('pointerdown', (event) => {
   if (event.button !== 0 || event.target.closest('.zoom-controls')) return;
+  if (flyAnimation) { cancelAnimationFrame(flyAnimation); flyAnimation = null; }
   const card = event.target.closest('.place-card') || cardAtPoint(event.clientX, event.clientY);
   if (card) {
     const item = place(card.dataset.placeId); if (!item) return;
+    currentBoardId = item.boardId; renderNavigation(); renderPalette(); renderHeader();
     selectPlace(item.id);
     gesture = { kind: 'place', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: item.x, y: item.y, item, card, moved: false };
   } else if (!event.target.closest('.canvas-tip')) {
-    if (placingType) { const point = screenToMap(event.clientX, event.clientY); addPlace(placingType, point.x - 76, point.y - 55); return; }
+    if (placingType) { addAtScreen(placingType, event.clientX, event.clientY); return; }
     selectPlace(null); gesture = { kind: 'pan', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: camera.x, y: camera.y };
     els.wrap.classList.add('panning');
   }
@@ -334,8 +398,11 @@ els.wrap.addEventListener('pointermove', (event) => {
     camera.x = gesture.x + dx; camera.y = gesture.y + dy; renderCamera();
   }
   else if (Math.abs(dx) + Math.abs(dy) > 3 || gesture.moved) {
-    gesture.moved = true; gesture.item.x = Math.round(gesture.x + dx / camera.scale); gesture.item.y = Math.round(gesture.y + dy / camera.scale);
-    gesture.card.style.left = `${gesture.item.x}px`; gesture.card.style.top = `${gesture.item.y}px`;
+    gesture.moved = true;
+    const parentScale = layout.boards.get(gesture.item.boardId)?.scale || 1;
+    gesture.item.x = Math.round(gesture.x + dx / (camera.scale * parentScale));
+    gesture.item.y = Math.round(gesture.y + dy / (camera.scale * parentScale));
+    layoutDirty = true; renderCamera();
     gesture.card.classList.add('dragging'); els.wrap.classList.add('dragging-place');
   }
 });
@@ -357,36 +424,14 @@ els.wrap.addEventListener('wheel', event => {
   if (gesture || performance.now() - lastDragEnd < 220) return;
   const rawDelta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? els.wrap.clientHeight : 1);
   if (!rawDelta) return;
-  const direction = Math.sign(rawDelta);
-  const now = performance.now();
-  if (now - lastWheelAt > 230 || direction !== wheelDirection) {
-    wheelDistance = 0;
-    if (direction !== wheelDirection && Math.abs(rawDelta) > 15) wheelChangedLevel = false;
-  }
-  lastWheelAt = now;
-  wheelDirection = direction;
-  clearTimeout(wheelIdleTimer);
-  wheelIdleTimer = setTimeout(() => { wheelChangedLevel = false; wheelDistance = 0; }, 230);
-  if (wheelChangedLevel) return;
-  wheelDistance += Math.min(250, Math.abs(rawDelta));
-  if (wheelDistance >= 75) {
-    const card = event.target.closest('.place-card');
-    const target = card ? place(card.dataset.placeId) : findZoomTarget(screenToMap(event.clientX, event.clientY));
-    if (direction < 0 && target && ENTERABLE.has(target.type)) {
-      enterPlace(target); wheelChangedLevel = true; wheelDistance = 0; return;
-    }
-    if (direction > 0 && board().parentPlaceId) {
-      zoomToParent(); wheelChangedLevel = true; wheelDistance = 0; return;
-    }
-    wheelDistance = 0;
-  }
-  const delta = Math.max(-120, Math.min(120, rawDelta));
-  zoomAt(Math.exp(-delta * 0.0012), event.clientX, event.clientY);
+  if (flyAnimation) { cancelAnimationFrame(flyAnimation); flyAnimation = null; }
+  const delta = Math.max(-160, Math.min(160, rawDelta));
+  zoomAt(Math.exp(-delta * 0.0018), event.clientX, event.clientY);
 }, { passive: false });
 els.wrap.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('text/mapmaker-place')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } });
 els.wrap.addEventListener('drop', event => {
   const type = event.dataTransfer.getData('text/mapmaker-place'); if (!TYPES[type]) return;
-  event.preventDefault(); const point = screenToMap(event.clientX, event.clientY); addPlace(type, point.x - 76, point.y - 55);
+  event.preventDefault(); addAtScreen(type, event.clientX, event.clientY);
 });
 
 els.name.addEventListener('input', () => {
@@ -409,7 +454,7 @@ $('#add-place').addEventListener('click', () => { els.palette.scrollIntoView({ b
 $('#new-atlas-button').addEventListener('click', () => {
   if (!confirm('Start a new example atlas? This replaces the atlas saved in this browser. Export a backup first if you want to keep it.')) return;
   atlas = starterAtlas(); currentBoardId = atlas.rootBoardId; selectedPlaceId = null; placingType = null;
-  cameraByBoard.clear(); camera = defaultCamera(); render(); scheduleSave(); toast('New atlas created');
+  camera = defaultCamera(); render(); scheduleSave(); toast('New atlas created');
 });
 $('#rename-board').addEventListener('click', () => {
   const name = prompt('Map name', board().name)?.trim(); if (!name) return;
@@ -417,11 +462,9 @@ $('#rename-board').addEventListener('click', () => {
   render(); scheduleSave();
 });
 $('#zoom-in').addEventListener('click', () => {
-  if (selectedPlaceId && ENTERABLE.has(place(selectedPlaceId)?.type)) { enterPlace(); return; }
   const r = els.wrap.getBoundingClientRect(); zoomAt(1.25, r.left + r.width / 2, r.top + r.height / 2);
 });
 $('#zoom-out').addEventListener('click', () => {
-  if (board().parentPlaceId) { zoomToParent(); return; }
   const r = els.wrap.getBoundingClientRect(); zoomAt(0.8, r.left + r.width / 2, r.top + r.height / 2);
 });
 $('#zoom-reset').addEventListener('click', () => { camera = defaultCamera(); renderCamera(); });
@@ -439,7 +482,7 @@ els.importInput.addEventListener('change', async () => {
     const next = validateAtlas(JSON.parse(await file.text()));
     if (!confirm('Replace the current atlas with this file? Export a backup first if you want to keep it.')) return;
     atlas = next; currentBoardId = atlas.rootBoardId; selectedPlaceId = null; placingType = null;
-    cameraByBoard.clear(); camera = defaultCamera(); render(); scheduleSave(); toast('Atlas imported');
+    camera = defaultCamera(); render(); scheduleSave(); toast('Atlas imported');
   } catch (error) { toast('This file is not a valid MapMaker atlas'); }
   finally { els.importInput.value = ''; }
 });

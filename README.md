@@ -14,9 +14,9 @@ Then open `http://127.0.0.1:8765/` in a browser on **the same computer**. `local
 
 ## Current features
 
-- Pan and zoom the map, drag existing places, and drag new places from the palette.
-- Scroll over a continent to reveal provinces, then scroll into settlements, houses, and rooms. Each wheel gesture changes at most one level. Scroll out to reverse through those same levels. All maps stay local and switch without a page load.
-- Double-click a place or use the atlas tree as another way to move between levels.
+- Pan and zoom smoothly through world, continent, province, settlement, and interior detail. The same detail level is available everywhere, so panning sideways reveals neighboring places and their details.
+- Places outside the view are removed from the page and rendered again when you approach them. Scroll out to reverse through the same continuous ranges without a page load.
+- Drag existing places and drag new places from the palette. Double-click a place or use the atlas tree to fly to it.
 - Add descriptions and session notes to places.
 - Automatically save in this browser and export/import an atlas as JSON.
 
@@ -26,13 +26,13 @@ The starting atlas includes three example continents and detail maps down to roo
 
 ## GitHub Pages
 
-The app is a static site. The files are already in the public GitHub repository. To give it a link that works in any browser, open the repository's **Settings → Pages**, select **Deploy from a branch**, choose **main** and **/(root)**, then save. Once GitHub finishes publishing, use `https://colonelfrikandel.github.io/MapMaker3000/`.
+The app is published at [https://colonelfrikandel.github.io/MapMaker3000/](https://colonelfrikandel.github.io/MapMaker3000/). GitHub Pages deploys from the `main` branch root.
 
 Browser storage is local to one browser and device. Export your atlas regularly to keep a backup or move it to another device.
 
-## Planned zoom improvement
+## Map coordinates
 
-Replace the current immediate map-level switch with continuous zoom ranges. Each range will blend progressively from the world to continent, province, settlement, and house interior, while preserving the cursor's position and allowing the same smooth motion in reverse. The existing board IDs and parent links can support this without changing the saved atlas format.
+Each board retains its existing local place coordinates. At render time, its geometry is projected inside its parent place into shared world coordinates. Zoom controls one camera across every board; adjacent places at the same depth therefore stay adjacent. The renderer mounts only cards near the viewport and blends neighboring detail depths as the scale changes. The saved atlas schema remains version 1, including its future session provenance fields.
 
 ## License
 
