@@ -10,7 +10,7 @@ The site has no build step or package dependencies. Run the included development
 npm run dev
 ```
 
-Then open `http://localhost:8765`.
+Then open `http://127.0.0.1:8765/` in a browser on **the same computer**. `localhost` and `127.0.0.1` do not work as links for other people or devices.
 
 ## Current features
 
@@ -26,9 +26,13 @@ The starting atlas includes three example continents and detail maps down to roo
 
 ## GitHub Pages
 
-The app is a static site. In the repository settings, enable **Pages** and choose **Deploy from a branch**, using the root of the default branch. The site will be served at `https://<username>.github.io/MapMaker3000/`.
+The app is a static site. The files are already in the public GitHub repository. To give it a link that works in any browser, open the repository's **Settings → Pages**, select **Deploy from a branch**, choose **main** and **/(root)**, then save. Once GitHub finishes publishing, use `https://colonelfrikandel.github.io/MapMaker3000/`.
 
 Browser storage is local to one browser and device. Export your atlas regularly to keep a backup or move it to another device.
+
+## Planned zoom improvement
+
+Replace the current immediate map-level switch with continuous zoom ranges. Each range will blend progressively from the world to continent, province, settlement, and house interior, while preserving the cursor's position and allowing the same smooth motion in reverse. The existing board IDs and parent links can support this without changing the saved atlas format.
 
 ## License
 
