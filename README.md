@@ -28,6 +28,8 @@ The data format uses stable IDs for places, boards, and connections. Places and 
 
 The starting atlas uses State Of Kemeia, Idrieland, Emerald Bay, and Island Of Crieta as test realms. The first three share a mainland; Crieta is a separate island. The supplied JSON files are reference material for later generation work; the site generates its world geometry itself. Existing atlases are preserved; use **New atlas** if you want to replace one with the new example.
 
+Open the [four-realm example](https://colonelfrikandel.github.io/MapMaker3000/?example=four-realms) to try it with separate browser storage, leaving your normal atlas untouched.
+
 To try another town layout, open a town or village and click **Generate town**. Choose a seed and size, inspect the preview, then choose **Use this town map**. The same seed and size reproduce the same geometry. House selection and interiors are planned for a later step.
 
 ## GitHub Pages

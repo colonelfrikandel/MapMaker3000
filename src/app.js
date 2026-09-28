@@ -4,7 +4,8 @@ import { planDetails } from './generator.js';
 import { artworkForPlace, artworkForBoard } from './cartography.js?v=world-base-1';
 import { validateTownBase, nearestTownFootprint } from './town-base.js';
 import { generateTownBase } from './town-generator.js';
-const STORAGE_KEY = 'mapmaker3000.atlas.v1';
+const EXAMPLE_MODE = new URLSearchParams(location.search).get('example') === 'four-realms';
+const STORAGE_KEY = EXAMPLE_MODE ? 'mapmaker3000.atlas.example.four-realms.v1' : 'mapmaker3000.atlas.v1';
 const TYPES = {
   world: { label: 'World', icon: '✧', color: '#806b4e', bg: '#f3ead6' },
   continent: { label: 'Realm', icon: '✥', color: '#806b4e', bg: '#f3ead6' },
