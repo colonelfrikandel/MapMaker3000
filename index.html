@@ -39,7 +39,7 @@
 
         <div class="map-header">
           <div><div class="eyebrow" id="map-kind">WORLD MAP</div><h1 id="map-title">The Shattered Realm</h1><p id="map-subtitle">Scroll for more detail. Drag to explore neighboring lands.</p></div>
-          <div class="map-header-actions"><button id="add-place" class="primary-button">＋ Add to map</button></div>
+          <div class="map-header-actions"><button id="generate-details" class="secondary-button" hidden>✦ Generate details</button><button id="add-place" class="primary-button">＋ Add to map</button></div>
         </div>
 
         <div class="canvas-wrap" id="canvas-wrap">
@@ -76,7 +76,8 @@
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <dialog id="help-dialog"><div class="dialog-top"><span class="eyebrow">CARTOGRAPHER'S GUIDE</span><button id="help-close" class="icon-button" aria-label="Close help">×</button></div><h2>Explore from realm to room.</h2><p>Scroll to move smoothly between world, continent, province, settlement, and house detail. The same detail level opens across the whole atlas, so drag sideways to explore neighboring places. Scroll out to reverse the journey. Double-click a place or use the atlas list to fly there.</p><p>Choose an element from the left and click the map, or drag it onto the canvas. Drag existing places to move them. Use Connect places, then choose two places on the same map to draw a road or other route. Click a route to edit its details. Your atlas saves in this browser; export a JSON backup to keep or transfer it.</p><button id="help-done" class="primary-button">Return to atlas</button></dialog>
+    <dialog id="help-dialog"><div class="dialog-top"><span class="eyebrow">CARTOGRAPHER'S GUIDE</span><button id="help-close" class="icon-button" aria-label="Close help">×</button></div><h2>Explore from realm to room.</h2><p>Scroll to move smoothly between world, continent, province, settlement, and house detail. The same detail level opens across the whole atlas, so drag sideways to explore neighboring places. Scroll out to reverse the journey. Double-click a place or use the atlas list to fly there.</p><p>Choose an element from the left and click the map, or drag it onto the canvas. Drag existing places to move them. Use Connect places, then choose two places on the same map to draw a road or other route. Click a route to edit its details. Inside a town, village, or house, use Generate details to add a seeded layout while keeping your existing work. Your atlas saves in this browser; export a JSON backup to keep or transfer it.</p><button id="help-done" class="primary-button">Return to atlas</button></dialog>
+    <dialog id="generator-dialog"><div class="dialog-top"><span class="eyebrow">ATLAS GENERATOR</span><button id="generator-close" class="icon-button" aria-label="Close generator">×</button></div><h2 id="generator-title">Generate details</h2><p id="generator-intro"></p><label class="generator-field">SEED<input id="generator-seed" type="text" maxlength="60" placeholder="A word or phrase" /></label><label class="generator-field">SIZE<select id="generator-size"><option value="small">Small</option><option value="standard" selected>Standard</option><option value="large">Large</option></select></label><p id="generator-preview" class="generator-preview"></p><div class="generator-actions"><button id="generator-cancel" class="text-button">Cancel</button><button id="generator-apply" class="primary-button">Add to atlas</button></div></dialog>
     <script type="module" src="./src/app.js"></script>
   </body>
 </html>

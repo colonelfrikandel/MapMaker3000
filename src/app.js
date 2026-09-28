@@ -1,5 +1,6 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
+import { canGenerate, planDetails } from './generator.js';
 const STORAGE_KEY = 'mapmaker3000.atlas.v1';
 const TYPES = {
   world: { label: 'World', icon: '✧', color: '#806b4e', bg: '#f3ead6' },
@@ -36,6 +37,9 @@ const els = {
   routesLayer: $('#routes-layer'), connect: $('#connect-places'), connectInstructions: $('#connect-instructions'),
   inspectorKind: $('#inspector-kind'), routeForm: $('#route-form'), routeName: $('#route-name'), routeType: $('#route-type'),
   routeDescription: $('#route-description'), routeNotes: $('#route-notes'),
+  generateButton: $('#generate-details'), generatorDialog: $('#generator-dialog'), generatorTitle: $('#generator-title'),
+  generatorIntro: $('#generator-intro'), generatorSeed: $('#generator-seed'), generatorSize: $('#generator-size'),
+  generatorPreview: $('#generator-preview'), generatorApply: $('#generator-apply'),
 };
 
 function id() { return crypto.randomUUID(); }
@@ -126,6 +130,7 @@ let paintQueued = false;
 let visibleCards = new Map();
 let visibleRoutes = new Map();
 let flyAnimation = null;
+let generatorBoardId = null;
 
 function board() { return atlas.boards[currentBoardId]; }
 function place(id) { return atlas.places[id]; }
@@ -300,6 +305,7 @@ function makeRouteNode(id) {
   const svg = 'http://www.w3.org/2000/svg';
   const group = document.createElementNS(svg, 'g');
   group.classList.add('route-group'); group.dataset.routeId = id; group.dataset.type = route(id).type;
+  if (route(id).provenance?.kind === 'generator') group.classList.add('generated');
   group.setAttribute('role', 'button'); group.setAttribute('tabindex', '0'); group.setAttribute('aria-label', `Edit connection ${route(id).name}`);
   const line = document.createElementNS(svg, 'path'); line.classList.add('route-line');
   const hit = document.createElementNS(svg, 'path'); hit.classList.add('route-hit');
@@ -392,6 +398,7 @@ function renderHeader() {
   els.kind.textContent = `${TYPES[board().kind]?.label || 'Map'} map`.toUpperCase();
   els.wrap.dataset.mapKind = board().kind;
   els.subtitle.textContent = 'Scroll to reveal detail across the atlas. Drag to visit neighboring places.';
+  els.generateButton.hidden = !canGenerate(board().kind);
 }
 function render() { renderNavigation(); renderPalette(); renderPlaces(); renderInspector(); renderHeader(); renderCamera(); }
 function selectPlace(pid) {
@@ -416,6 +423,57 @@ function addPlace(type, x, y, boardId = currentBoardId) {
   if (ENTERABLE.has(type)) { const child = makeBoard(item.name, type, item.id); atlas.boards[child.id] = child; item.childBoardId = child.id; }
   render(); selectPlace(item.id); scheduleSave(); toast(`${TYPES[type].label} added`);
   if (window.innerWidth > 1050) els.name.focus();
+}
+function generatedBefore(boardId, seed) {
+  return atlas.boards[boardId].placeIds.some(pid => place(pid)?.provenance?.kind === 'generator' && place(pid).provenance.seed === seed);
+}
+function generatorPlan(boardId, seed, size) {
+  const target = atlas.boards[boardId];
+  return planDetails(target.kind, seed, size, target.placeIds.map(place).filter(Boolean));
+}
+function updateGeneratorPreview() {
+  if (!generatorBoardId || !atlas.boards[generatorBoardId]) return;
+  const seed = els.generatorSeed.value.trim();
+  const target = atlas.boards[generatorBoardId];
+  const repeated = seed && generatedBefore(generatorBoardId, seed);
+  const plan = seed && !repeated ? generatorPlan(generatorBoardId, seed, els.generatorSize.value) : [];
+  const houses = plan.filter(item => item.type === 'house').length;
+  const rooms = houses ? plan.reduce((count, item, index) => count + (item.type === 'house' ? planDetails('house', `${seed}:${index}`, 'standard').length : 0), 0) : 0;
+  els.generatorPreview.textContent = !seed ? 'Enter a seed to preview this layout.' : repeated ?
+    'This seed has already been used on this map. Enter a different seed to add another set.' : !plan.length ?
+    'There is no open space for more places on this map.' : target.kind === 'house' ?
+    `Adds ${plan.length} rooms and connecting passages. Existing rooms stay in place.` :
+    `Adds ${plan.length} places, including ${houses} houses with ${rooms} rooms, and connecting paths. Existing places stay in place.`;
+  els.generatorApply.disabled = !plan.length;
+}
+function populateGeneratedBoard(boardId, plan, seed) {
+  const target = atlas.boards[boardId];
+  const prior = target.placeIds.map(place).filter(Boolean);
+  for (const [index, spec] of plan.entries()) {
+    let nearest = null, best = Infinity;
+    for (const candidate of prior) {
+      const distance = (candidate.x - spec.x) ** 2 + (candidate.y - spec.y) ** 2;
+      if (distance < best) { best = distance; nearest = candidate; }
+    }
+    const item = makePlace(boardId, spec.type, spec.name, spec.x, spec.y);
+    item.description = spec.description;
+    item.provenance = { kind: 'generator', seed, sessionRefs: [] };
+    atlas.places[item.id] = item; target.placeIds.push(item.id);
+    if (nearest) {
+      const type = target.kind === 'house' ? 'passage' : target.kind === 'village' ? 'trail' : 'road';
+      const name = type === 'passage' ? 'Doorway' : type === 'trail' ? 'Footpath' : 'Town lane';
+      const connection = makeRoute(boardId, nearest.id, item.id, type, name);
+      connection.provenance = { kind: 'generator', seed, sessionRefs: [] };
+      atlas.routes[connection.id] = connection;
+    }
+    prior.push(item);
+    if (item.type === 'house') {
+      const child = makeBoard(item.name, 'house', item.id);
+      item.childBoardId = child.id; atlas.boards[child.id] = child;
+      const childSeed = `${seed}:${index}`;
+      populateGeneratedBoard(child.id, planDetails('house', childSeed, 'standard'), childSeed);
+    }
+  }
 }
 function connectPlaces(fromId, toId) {
   const from = place(fromId), to = place(toId);
@@ -594,6 +652,31 @@ els.enter.addEventListener('click', enterPlace);
 $('#delete-place').addEventListener('click', deletePlace);
 $('#close-inspector').addEventListener('click', () => selectPlace(null));
 $('#add-place').addEventListener('click', () => { els.palette.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); toast('Choose a place from the left, then click the map'); });
+els.generateButton.addEventListener('click', () => {
+  if (!canGenerate(board().kind)) return;
+  generatorBoardId = currentBoardId;
+  els.generatorTitle.textContent = board().kind === 'house' ? `Fill ${board().name} with rooms` : `Grow ${board().name}`;
+  els.generatorIntro.textContent = board().kind === 'house' ?
+    'Create a repeatable room layout with passages. Your existing rooms and notes stay where they are.' :
+    'Create a repeatable settlement layout with houses, a gathering place, paths, and ready-made interiors. Your existing places and notes stay where they are.';
+  els.generatorSeed.value = crypto.randomUUID().slice(0, 8);
+  els.generatorSize.value = 'standard';
+  updateGeneratorPreview(); els.generatorDialog.showModal(); els.generatorSeed.focus();
+});
+els.generatorSeed.addEventListener('input', updateGeneratorPreview);
+els.generatorSize.addEventListener('change', updateGeneratorPreview);
+$('#generator-close').addEventListener('click', () => els.generatorDialog.close());
+$('#generator-cancel').addEventListener('click', () => els.generatorDialog.close());
+els.generatorApply.addEventListener('click', () => {
+  if (!generatorBoardId || !atlas.boards[generatorBoardId]) return;
+  const seed = els.generatorSeed.value.trim();
+  if (!seed || generatedBefore(generatorBoardId, seed)) { updateGeneratorPreview(); return; }
+  const plan = generatorPlan(generatorBoardId, seed, els.generatorSize.value);
+  if (!plan.length) { updateGeneratorPreview(); return; }
+  populateGeneratedBoard(generatorBoardId, plan, seed);
+  els.generatorDialog.close(); generatorBoardId = null;
+  render(); scheduleSave(); toast(`${plan.length} places added to ${board().name}`);
+});
 $('#new-atlas-button').addEventListener('click', () => {
   if (!confirm('Start a new example atlas? This replaces the atlas saved in this browser. Export a backup first if you want to keep it.')) return;
   atlas = starterAtlas(); currentBoardId = atlas.rootBoardId; selectedPlaceId = null; selectedRouteId = null; placingType = null;
