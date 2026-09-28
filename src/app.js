@@ -40,7 +40,7 @@ const els = {
   routeDescription: $('#route-description'), routeNotes: $('#route-notes'),
   generateButton: $('#generate-details'), generatorDialog: $('#generator-dialog'), generatorTitle: $('#generator-title'),
   generatorIntro: $('#generator-intro'), generatorSeed: $('#generator-seed'), generatorSize: $('#generator-size'),
-  generatorPreview: $('#generator-preview'), generatorApply: $('#generator-apply'),
+  generatorPreview: $('#generator-preview'), generatorMapPreview: $('#generator-map-preview'), generatorApply: $('#generator-apply'),
 };
 
 function id() { return crypto.randomUUID(); }
@@ -456,6 +456,15 @@ function updateGeneratorPreview() {
   const target = atlas.boards[generatorBoardId];
   const repeated = seed && generatedBefore(generatorBoardId, seed);
   const plan = seed && !repeated ? generatorPlan(generatorBoardId, seed, els.generatorSize.value) : [];
+  const previewPlaces = Object.fromEntries(plan.map((spec, index) => [`preview-${index}`, spec]));
+  const previewBoard = { ...target, placeIds: [...target.placeIds, ...Object.keys(previewPlaces)] };
+  const previewAtlas = { places: { ...atlas.places, ...previewPlaces } };
+  let previewArt = artworkForBoard(previewBoard, previewAtlas).replace('<svg viewBox=', '<svg width="1010" height="630" viewBox=');
+  const existingArt = target.placeIds.map(pid => place(pid)).filter(Boolean).map(item =>
+    artworkForPlace(item).replace('<svg class="place-art"', `<svg x="${Number(item.x)}" y="${Number(item.y)}" opacity=".55" class="place-art"`)).join('');
+  const plannedArt = plan.map(item =>
+    artworkForPlace(item).replace('<svg class="place-art"', `<svg x="${item.x}" y="${item.y}" class="place-art"`)).join('');
+  els.generatorMapPreview.innerHTML = `<svg viewBox="0 0 1010 630" aria-hidden="true">${previewArt}${existingArt}${plannedArt}</svg>`;
   const houses = plan.filter(item => item.type === 'house').length;
   const rooms = houses ? plan.reduce((count, item, index) => count + (item.type === 'house' ? planDetails('house', `${seed}:${index}`, 'standard').length : 0), 0) : 0;
   els.generatorPreview.textContent = !seed ? 'Enter a seed to preview this layout.' : repeated ?
@@ -599,7 +608,11 @@ els.wrap.addEventListener('pointermove', (event) => {
 });
 function endGesture(event) {
   if (!gesture || gesture.pointerId !== event.pointerId) return;
-  if (gesture.kind === 'place' && gesture.moved) scheduleSave();
+  if (gesture.kind === 'place' && gesture.moved) {
+    const terrain = visibleBoards.get(gesture.item.boardId);
+    if (terrain) { terrain.remove(); visibleBoards.delete(gesture.item.boardId); }
+    renderCamera(); scheduleSave();
+  }
   gesture.card?.classList.remove('dragging');
   if (gesture.moved) lastDragEnd = performance.now();
   gesture = null; els.wrap.classList.remove('panning', 'dragging-place');
@@ -684,6 +697,7 @@ els.generateButton.addEventListener('click', () => {
 });
 els.generatorSeed.addEventListener('input', updateGeneratorPreview);
 els.generatorSize.addEventListener('change', updateGeneratorPreview);
+$('#generator-reroll').addEventListener('click', () => { els.generatorSeed.value = crypto.randomUUID().slice(0, 8); updateGeneratorPreview(); });
 $('#generator-close').addEventListener('click', () => els.generatorDialog.close());
 $('#generator-cancel').addEventListener('click', () => els.generatorDialog.close());
 els.generatorApply.addEventListener('click', () => {

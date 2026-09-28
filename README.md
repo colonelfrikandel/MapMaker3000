@@ -19,7 +19,7 @@ Then open `http://127.0.0.1:8765/` in a browser on **the same computer**. `local
 - The map uses deterministic vector artwork instead of location cards: coastlines and terrain, settlement footprints, streets and buildings, house roofs, and furnished room plans. Town and house map layers are rendered only when in view.
 - Drag existing places and drag new places from the palette. Double-click a place or use the atlas tree to fly to it.
 - Connect two places on the same map with a road, trail, river, sea route, or passage. Click the connection to name it and add travel notes. Connections follow their places when those places move.
-- Generate seeded town or village layouts with houses, a landmark, paths, and room layouts inside new houses. Generate additional rooms and passages inside a house. Generation fills open space and preserves existing places and notes.
+- Preview and generate seeded town or village layouts with houses, a landmark, streets, and room layouts inside new houses. New seeds place buildings in available space; the streets follow editable places. Generate additional rooms and passages inside a house. Generation preserves existing places and notes.
 - Add descriptions and session notes to places.
 - Automatically save in this browser and export/import an atlas as JSON.
 
@@ -27,7 +27,7 @@ The data format uses stable IDs for places, boards, and connections. Places and 
 
 The starting atlas includes three example continents and detail maps down to rooms. Existing atlases are preserved; use **New atlas** if you want to replace one with the new example.
 
-To generate a layout, zoom into a town, village, or house and click **Generate details**. Choose a seed and size, review the count, then add it to the atlas. A seed produces the same layout for the same starting map. Generated places are ordinary editable places; each keeps its generator seed in `provenance` for future session and revision tools.
+To generate a layout, zoom into a town, village, or house and click **Generate details**. Choose a seed and size, inspect the visual preview, or choose **New seed** to try another layout. A seed produces the same layout for the same starting map. Generated places are ordinary editable places; each keeps its generator seed in `provenance` for future session and revision tools.
 
 ## GitHub Pages
 

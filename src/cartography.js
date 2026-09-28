@@ -132,20 +132,52 @@ export function artworkForBoard(board, atlas) {
     return `<svg viewBox="0 0 1010 630" aria-hidden="true">${floor}</svg>`;
   }
   const town = board.kind === 'town';
-  const pathA = 'M-30 340 C170 320 230 190 430 270 S730 440 1040 220';
-  const pathB = 'M210 -25 C250 150 390 250 570 310 S760 485 810 670';
-  let art = `<path d="M41 113 Q280 24 517 79 T973 132 L970 524 Q660 627 399 574 T41 513Z" fill="#d9d0ae" fill-opacity=".55" stroke="#8b8a68" stroke-width="3" stroke-dasharray="${town ? '18 5' : '4 9'}"/>`;
-  for (const road of [pathA, pathB]) art += `<path d="${road}" fill="none" stroke="#ae9b75" stroke-width="21"/><path d="${road}" fill="none" stroke="#e9dcba" stroke-width="12"/>`;
-  art += `<path d="M80 135 Q235 170 430 125 T940 160 M60 500 Q290 465 440 515 T950 480" fill="none" stroke="#b9a785" stroke-width="8" stroke-linecap="round"/>`;
-  const count = town ? 112 : 63;
-  for (let i=0;i<count;i++) {
-    const x = n(74 + rand()*858), y = n(92 + rand()*446);
-    // Leave a broad ribbon around the main streets so the street plan stays legible.
-    const mainRoadY = 340 - .1*x + 55*Math.sin(x/130);
-    if (Math.abs(y-mainRoadY)<22 || Math.abs(x-(210+y*.8))<23) continue;
-    const w = n(8+rand()*13), h = n(6+rand()*12);
-    art += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${rand()>.5?'#957159':'#806b55'}" stroke="#554b3e" stroke-width="1" transform="rotate(${n((rand()-.5)*14)} ${x} ${y})"/>`;
+  const places = board.placeIds.map(id => atlas.places[id]).filter(Boolean);
+  const centers = places.map(item => {
+    const [w, h] = cardSize(item.type);
+    return { x: item.x + w/2, y: item.y + h/2, item };
+  });
+  const anchor = centers.find(point => point.item.type === 'landmark') || { x: 505, y: 315 };
+  const roads = [
+    { x1: -20, y1: anchor.y, x2: anchor.x, y2: anchor.y },
+    { x1: anchor.x, y1: anchor.y, x2: 1030, y2: n(anchor.y - 90) },
+  ];
+  // A nearest-neighbor street tree keeps every editable place on the road network.
+  const connected = [anchor], remaining = centers.filter(point => point !== anchor);
+  while (remaining.length) {
+    let best = { distance: Infinity, index: -1, from: null };
+    for (let i=0;i<remaining.length;i++) for (const from of connected) {
+      const distance = (remaining[i].x-from.x)**2 + (remaining[i].y-from.y)**2;
+      if (distance < best.distance) best = { distance, index: i, from };
+    }
+    const to = remaining.splice(best.index, 1)[0];
+    roads.push({ x1: best.from.x, y1: best.from.y, x2: to.x, y2: to.y });
+    connected.push(to);
   }
-  art += trees(rand, town ? 70 : 95, 1010, 630, '#708367');
+  const wall = 'M41 113 Q280 24 517 79 T973 132 L970 524 Q660 627 399 574 T41 513Z';
+  let art = `<path d="${wall}" fill="#d9d0ae" fill-opacity=".7" stroke="#77775e" stroke-width="${town ? 5 : 2}" stroke-dasharray="${town ? '22 4' : '4 9'}"/>`;
+  const roadPaths = roads.map(({x1,y1,x2,y2}, index) => {
+    const bend = index < 2 ? 0 : n((rand()-.5)*38);
+    return `M${n(x1)} ${n(y1)} Q${n((x1+x2)/2+bend)} ${n((y1+y2)/2-bend)} ${n(x2)} ${n(y2)}`;
+  });
+  for (const road of roadPaths) art += `<path d="${road}" fill="none" stroke="#ab9672" stroke-width="${town ? 17 : 12}" stroke-linecap="round"/><path d="${road}" fill="none" stroke="#e9dcba" stroke-width="${town ? 11 : 7}" stroke-linecap="round"/>`;
+  function nearRoad(x, y) {
+    return roads.some(({x1,y1,x2,y2}) => {
+      const dx = x2-x1, dy = y2-y1;
+      const t = Math.max(0, Math.min(1, ((x-x1)*dx+(y-y1)*dy)/(dx*dx+dy*dy || 1)));
+      return Math.hypot(x-(x1+t*dx), y-(y1+t*dy)) < 16;
+    });
+  }
+  const count = town ? 180 : 95;
+  for (let i=0;i<count;i++) {
+    const x = n(64 + rand()*870), y = n(90 + rand()*440);
+    const w = n(7+rand()*12), h = n(6+rand()*10);
+    if (nearRoad(x+w/2,y+h/2) || places.some(item => {
+      const [pw,ph] = cardSize(item.type);
+      return x < item.x+pw+6 && x+w+6 > item.x && y < item.y+ph+6 && y+h+6 > item.y;
+    })) continue;
+    art += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${rand()>.5?'#957159':'#806b55'}" stroke="#554b3e" stroke-width="1" transform="rotate(${n((rand()-.5)*12)} ${x} ${y})"/>`;
+  }
+  art += trees(rand, town ? 48 : 70, 1010, 630, '#708367');
   return `<svg viewBox="0 0 1010 630" aria-hidden="true">${art}</svg>`;
 }

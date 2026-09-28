@@ -17,3 +17,13 @@ test('a house floor connects its room footprints', () => {
   const art = artworkForBoard(board, atlas);
   assert.match(art, /M290 217H650V387/);
 });
+
+test('settlement streets follow editable places when they move', () => {
+  const board = { kind: 'town', name: 'Greyharbor', placeIds: ['a', 'b'] };
+  const atlas = { places: { a: { type: 'landmark', x: 400, y: 260 }, b: { type: 'house', x: 650, y: 300 } } };
+  const before = artworkForBoard(board, atlas);
+  atlas.places.b.x = 730;
+  const after = artworkForBoard(board, atlas);
+  assert.notEqual(before, after);
+  assert.match(after, /806 349/);
+});

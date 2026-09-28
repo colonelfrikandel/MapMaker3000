@@ -58,13 +58,13 @@ export function planDetails(kind, seed, size, existing = []) {
   const occupied = existing.map(item => ({ type: item.type, x: item.x, y: item.y }));
   const names = new Set(existing.map(item => item.name));
   const isHouse = kind === 'house';
-  const xs = isHouse ? [45, 285, 525, 765] : [60, 250, 440, 630, 820];
-  const ys = isHouse ? [45, 245, 445] : [55, 195, 335, 475];
-  const jitter = isHouse ? 12 : 8;
-  const slots = shuffle(ys.flatMap(y => xs.map(x => ({
-    x: x + Math.round((random() * 2 - 1) * jitter),
-    y: y + Math.round((random() * 2 - 1) * jitter),
-  }))), random);
+  const slots = isHouse ? shuffle([45, 245, 445].flatMap(y => [45, 285, 525, 765].map(x => ({
+    x: x + Math.round((random() * 2 - 1) * 12),
+    y: y + Math.round((random() * 2 - 1) * 12),
+  }))), random) : [
+    { x: 429 + Math.round((random()-.5)*46), y: 266 + Math.round((random()-.5)*32) },
+    ...Array.from({ length: 350 }, () => ({ x: 48 + Math.floor(random()*750), y: 48 + Math.floor(random()*472) })),
+  ];
   const houseNames = shuffle(isHouse ? ROOM_NAMES : HOUSE_NAMES, random);
   const landmarkNames = shuffle(kind === 'village' ? VILLAGE_LANDMARKS : TOWN_LANDMARKS, random);
   const target = COUNTS[kind][size];
