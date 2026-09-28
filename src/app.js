@@ -1,7 +1,7 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
 import { canGenerate, planDetails } from './generator.js';
-import { artworkForPlace, artworkForBoard } from './cartography.js';
+import { artworkForPlace, artworkForBoard } from './cartography.js?v=town-base-1';
 import { normalizeWatabouTown, validateTownBase, nearestTownFootprint } from './watabou.js';
 const STORAGE_KEY = 'mapmaker3000.atlas.v1';
 const TYPES = {
