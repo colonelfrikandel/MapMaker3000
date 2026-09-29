@@ -85,12 +85,26 @@ export function townBaseSvg(base) {
   const districtColors = ['#d6c58b','#e2bd70','#b4bd83','#c4af91','#d5bd98','#bac4a0','#b5a680'];
   let svg = `<rect width="1010" height="630" fill="#e3e2d7"/>`;
   svg += fill('earth', '#e3e2d7') + fill('fields', '#d7d3a9') + fill('water', '#5e9fb0');
+  // Furrows and hedgerows follow each field's own orientation.
+  for (const field of l.fields) {
+    if (field.length !== 4) continue;
+    for (let i=1;i<8;i++) {
+      const t=i/8, a=field[0].map((v,j)=>round(v+(field[1][j]-v)*t)), b=field[3].map((v,j)=>round(v+(field[2][j]-v)*t));
+      svg+=`<path d="M${a.join(' ')}L${b.join(' ')}" stroke="#b1aa7a" stroke-width=".8" fill="none"/>`;
+    }
+    svg+=`<path d="${polygonPath(field)}" stroke="#96a075" stroke-width="1.4" fill="none"/>`;
+  }
   for (const [index, district] of l.districts.entries()) svg += `<path d="${polygonPath(district.polygon)}" fill="${districtColors[index % districtColors.length]}" fill-opacity=".86" stroke="#8d896e" stroke-width=".8"/>`;
   svg += fill('greens', '#a5ba81') + fill('squares', '#eee5c6');
   svg += l.rivers.map(line => `<path d="${linePath(line.points)}" fill="none" stroke="#456d73" stroke-width="${line.width+2}" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
   svg += stroke('rivers', '#65a9ba', null);
   svg += stroke('roads', '#665b50', null) + l.roads.map(line => `<path d="${linePath(line.points)}" fill="none" stroke="#d9d1ba" stroke-width="${Math.max(1,line.width-2)}" stroke-linecap="round"/>`).join('');
   svg += fill('buildings', '#b17858') + `<path d="${l.buildings.map(polygonPath).join('')}" fill="none" stroke="#5b5146" stroke-width=".8"/>`;
+  for (const [index,roof] of l.buildings.entries()) {
+    if (roof.length!==4) continue;
+    const a=roof[0].map((v,j)=>round((v+roof[3][j])/2)),b=roof[1].map((v,j)=>round((v+roof[2][j])/2));
+    svg+=`<path d="${polygonPath([roof[0],roof[1],b,a])}" fill="${['#d2ac7d','#c89870','#a9a088'][index%3]}"/><path d="M${a.join(' ')}L${b.join(' ')}" stroke="#654f3c" stroke-width=".8"/>`;
+  }
   svg += fill('prisms', '#655f5a') + stroke('planks', '#675f52', null);
   svg += `<path d="${l.walls.map(polygonPath).join('')}" fill="none" stroke="#4e4c49" stroke-width="4" stroke-linejoin="round"/>`;
   svg += l.trees.map(([x,y]) => `<circle cx="${x}" cy="${y}" r="3.2" fill="#7e9b70" stroke="#607b5d" stroke-width=".8"/>`).join('');
