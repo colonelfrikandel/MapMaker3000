@@ -52,7 +52,7 @@ function planVillage(board,places,seed,size,options) {
     }
     if(!geography) throw new Error('This geography cannot fit around the kept places. Try another seed, keep the current geography, or uncheck Keep this place for a location that may move.');
   }
-  const base=generateTownBase('village',seed,size,houses.map(a=>a.polygon),{geography,avoid:kept.filter(a=>a.place.type!=='house').map(a=>a.polygon)});
+  const base=generateTownBase('village',seed,size,houses.map(a=>a.polygon),{geography,decorationSeed:options.decorationSeed,avoid:kept.filter(a=>a.place.type!=='house').map(a=>a.polygon)});
   const indices=Object.fromEntries(houses.map((a,i)=>[a.place.id,i])),positions={};
   const available=base.layers.buildings.map((polygon,index)=>({polygon,index})).slice(houses.length);
   for(const item of items.filter(p=>p.keepPlace===false)) {
@@ -80,7 +80,7 @@ export function planSettlement(board, places, seed, size, options = {}) {
     return {placeId:place.id,polygon:polygon || [[x-15,y-12],[x+15,y-12],[x+15,y+12],[x-15,y+12]]};
   });
   // Existing geography is a campaign fact too: retain roads, river and public spaces.
-  const base=generateTownBase(board.kind,seed,size);
+  const base=generateTownBase(board.kind,seed,size,[],options);
   if (board.baseMap) for (const key of ['water','rivers','roads','planks','squares','greens','walls','districts']) base.layers[key]=structuredClone(board.baseMap.layers[key]);
   // Keep a generous corridor around the saved road network when changing plots.
   function obstructsRoad(polygon) {
@@ -100,7 +100,8 @@ export function planSettlement(board, places, seed, size, options = {}) {
   return {base,indices};
 }
 export function applySettlement(board,places,plan) {
-  board.baseMap=plan.base;
+  board.baseMap=structuredClone(plan.base);
+  if (board.generator) board.generator = {name:plan.base.source, version:String(plan.base.version)};
   for (const [id,index] of Object.entries(plan.indices)) places[id].baseFootprintIndex=index;
   for (const [id,position] of Object.entries(plan.positions || {})) Object.assign(places[id],position);
   if(plan.keepGeography!=null) board.keepGeography=plan.keepGeography;

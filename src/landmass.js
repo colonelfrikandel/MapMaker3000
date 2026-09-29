@@ -116,6 +116,10 @@ export function terrainContours(realms,seed) {
       noise(wx/17,wy/17,seed+4)*12+noise(wx/6,wy/6,seed+5)*4;
     field[i]=Math.max(core[i],field[i]+relief-10);
   }
+  return contourField(field,nx,ny,step,left,top);
+}
+
+export function contourField(field,nx,ny,step,left,top) {
   // March triangles with shared edge IDs. Closed loops include inland seas;
   // even-odd filling distinguishes these from the outer coastline.
   const vertices=new Map(),links=new Map();

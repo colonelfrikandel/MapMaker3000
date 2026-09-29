@@ -2,7 +2,7 @@
 // Deterministic, code-native map artwork. All SVG strings contain generated numbers only.
 import { cardSize } from './geometry.js';
 import { townBaseSvg } from './town-base.js';
-import { worldSvg } from './world-generator.js?v=gentle-inlets-5';
+import { worldSvg } from './world-generator.js?v=biome-circles-1';
 
 export function worldRealms(board,atlas) {
   return board.placeIds.map(id=>atlas.places[id]).filter(item=>item?.type==='continent').map(item=>{
@@ -160,7 +160,7 @@ export function artworkForBoard(board, atlas) {
     return `<svg viewBox="0 0 1010 630" aria-hidden="true">${art}</svg>`;
   }
   if (board.kind === 'world') {
-    return worldSvg(worldRealms(board,atlas), board.worldSeed || board.name);
+    return worldSvg(worldRealms(board,atlas), board.worldSeed || board.name, atlas.worlds?.[board.id]);
   }
   if (!['town', 'village', 'house'].includes(board.kind)) return '';
   if (board.baseMap && (board.kind === 'town' || board.kind === 'village')) return townBaseSvg(board.baseMap);

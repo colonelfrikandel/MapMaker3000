@@ -573,3 +573,80 @@ Example extracted tags:
 Before applying the result, the interface should show the interpreted brief and
 allow the user to edit or approve it. This avoids an incorrect interpretation
 silently changing the village.
+
+
+18. Implementation status (2026-09-29)
+---------------------------------------
+
+Implemented in the current working tree:
+
+- Added independent, deterministic continent generation with broad, fragmented,
+  north-south, and island-heavy outline presets. The generator supports preview,
+  cancel, apply, undo, large or negative coordinates, and preservation of realm
+  and campaign identities.
+- Separated natural geography, editable biome regions, political territories,
+  settlements, routes, and campaign content into independent atlas layers.
+- Added deterministic natural-geography generation code for elevation,
+  temperature, rainfall, mountains, lakes, rivers, wetlands, and initial biome
+  regions. Generated geography carries fields, provenance, edit state, and
+  protected/manual override handling.
+- Added the biome Pen-tool editor. Biomes can be created, selected, reshaped,
+  moved, smoothed/merged, duplicated, deleted, reprioritized, and changed in
+  type. Polygon points, holes, curved display geometry, and overlap priority
+  survive save/load.
+- Added political territory editing as a separate layer. Territories can be
+  drawn, selected, moved, reshaped, duplicated, deleted, reassigned, prioritized,
+  and hidden without changing terrain, ecology, settlements, or campaign data.
+- Added undo/redo and isolated generation previews. Cancelled, stale, or invalid
+  previews do not mutate the atlas; applied previews are single undoable actions.
+- Added atlas validation, version-2 layer format, upgrade preview, provenance,
+  manual/protected edit states, deletion tracking, and compatibility handling for
+  older saved atlases.
+- Added environment sampling for settlements, including biome, elevation,
+  temperature, rainfall, water, roads, rivers, and resource context.
+- Split settlement layout and vegetation seeds so vegetation can change without
+  moving roads, buildings, or established geography. Existing named places,
+  interiors, notes, events, and protected footprints remain stable through
+  regeneration.
+- Added tests for the new layers, geography, editor operations, validation,
+  migration, preservation rules, deterministic generation, and settlement
+  regeneration. The current test suite passes: 98 tests, 0 failures.
+
+Still to be done:
+
+- Expose the natural-geography generator as a complete user-facing workflow in
+  the world-generation UI. The generation code and merge rules exist, but the
+  current public world-generation workflow intentionally applies land first and
+  does not yet expose full elevation/climate/river/mountain generation as a
+  normal step.
+- Finish richer natural-geography editing: direct editing of rivers, lakes,
+  mountain regions, elevation, climate, and rainfall is not yet a complete
+  editor comparable to the biome and territory editors.
+- Make settlement generation use the sampled environment more deeply. The
+  context is available, but architecture, resources, vegetation, settlement
+  density, clearance masks, and edge blending still need broader biome-specific
+  behavior.
+- Implement narrative layout briefs for villages: parse descriptions into
+  arrival directions, zones, landmarks, relationships, importance levels, and
+  decorative details, then preview and approve the resulting deterministic
+  layout.
+- Implement reviewed transcript/session suggestions. Session text must be
+  converted into explicit suggestions, shown as a diff/preview, individually or
+  batch-approved, and saved with source provenance. No automatic transcript
+  rewriting should be added.
+- Add the postponed individual house-movement tool and optional settlement
+  reflow while preserving house identity, rooms, notes, events, roads, and
+  plots.
+- Improve visual blending and polish at biome boundaries, including more
+  environment-specific vegetation, snow, desert, mountain, river, and wetland
+  decoration.
+- Add broader browser/manual QA for the editor interactions, accessibility,
+  responsive layouts, performance on very large maps, and exported/imported
+  atlas compatibility beyond the automated test coverage.
+
+The current milestone therefore covers the core land-first architecture,
+layer separation, deterministic generation, editable biomes and territories,
+preview/undo safety, and preservation of campaign content. The next major
+milestones are the user-facing natural-geography workflow, richer
+environment-aware settlements, narrative village briefs, reviewed transcript
+suggestions, and finally house movement/reflow.

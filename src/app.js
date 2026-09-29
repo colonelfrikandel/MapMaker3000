@@ -1,9 +1,15 @@
+import { samplePlaceEnvironment, environmentDescription } from './environment.js';
+import { DEFAULT_CONTINENT } from './continent.js';
+import { installBiomeEditor } from './biome-editor-ui.js';
+import { previewContinent } from './world-planning.js';
+import { createHistory, createPreview } from './editor.js';
+import { validateAtlas, previewAtlasUpgrade, serializeAtlas } from './atlas.js';
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
 import { planDetails } from './generator.js';
-import { artworkForPlace, artworkForBoard, worldRealms } from './cartography.js?v=gentle-inlets-5';
-import { worldIslandConflicts, worldLandShape } from './world-generator.js?v=gentle-inlets-5';
-import { validateTownBase, nearestTownFootprint } from './town-base.js';
+import { artworkForPlace, artworkForBoard, worldRealms } from './cartography.js?v=biome-circles-1';
+import { worldIslandConflicts, worldLandShape } from './world-generator.js?v=biome-circles-1';
+import { nearestTownFootprint } from './town-base.js';
 import { generateTownBase } from './town-generator.js';
 import { addVillageExample, addCampaignEvent, planSettlement, applySettlement, villageType } from './campaign.js';
 
@@ -105,44 +111,11 @@ function loadAtlas() {
   } catch (error) { console.warn('Could not load saved atlas', error); }
   return starterAtlas();
 }
-function validateAtlas(value) {
-  if (!value || value.schemaVersion !== 1 || typeof value.boards !== 'object' || typeof value.places !== 'object' ||
-      !value.boards[value.rootBoardId] || !Array.isArray(value.boards[value.rootBoardId].placeIds)) throw new Error('Unsupported atlas file');
-  for (const board of Object.values(value.boards)) {
-    if (!board || typeof board.name !== 'string' || !Array.isArray(board.placeIds)) throw new Error('Invalid map data');
-    if (!board.baseMap && ['town', 'village'].includes(board.kind)) board.baseMap = generateTownBase(board.kind, board.name, 'standard');
-    if (board.baseMap) validateTownBase(board.baseMap);
-    if (board.keepGeography != null && typeof board.keepGeography !== 'boolean') throw new Error('Invalid geography protection');
-    for (const placeId of board.placeIds) {
-      const place = value.places[placeId];
-      if (!place || place.boardId !== board.id || !Object.hasOwn(TYPES, place.type) || !Number.isFinite(place.x) || !Number.isFinite(place.y)) throw new Error('Invalid place data');
-      if (place.keepPlace != null && typeof place.keepPlace !== 'boolean') throw new Error('Invalid place protection');
-      if (place.type === 'continent') {
-        if (!REALM_BIOMES.includes(place.biome)) place.biome = randomRealmBiome(place.name);
-        place.island = !!place.island;
-      }
-      if (place.type === 'house' && board.baseMap && place.baseFootprintIndex == null) {
-        const [w,h] = cardSize('house');
-        const footprint = nearestTownFootprint(board.baseMap, { x:place.x+w/2, y:place.y+h/2 }, 1000);
-        if (footprint) { place.baseFootprintIndex = footprint.index; place.x = Math.round(footprint.x-w/2); place.y = Math.round(footprint.y-h/2); }
-      }
-      if (place.baseFootprintIndex != null && (!board.baseMap || !Number.isInteger(place.baseFootprintIndex) || place.baseFootprintIndex < 0 || place.baseFootprintIndex >= board.baseMap.layers.buildings.length)) throw new Error('Invalid notable building');
-      if (place.events != null && (!Array.isArray(place.events) || place.events.length > 1000 || place.events.some(event => !event || typeof event.id !== 'string' || typeof event.title !== 'string' || typeof event.detail !== 'string' || typeof event.session !== 'string'))) throw new Error('Invalid campaign events');
-    }
-  }
-  value.sessions ||= {};
-  value.routes ||= {};
-  if (typeof value.routes !== 'object' || Array.isArray(value.routes)) throw new Error('Invalid route data');
-  for (const [routeId, route] of Object.entries(value.routes)) {
-    if (!route || route.id !== routeId || !value.boards[route.boardId] || !value.places[route.fromPlaceId] || !value.places[route.toPlaceId] ||
-        value.places[route.fromPlaceId].boardId !== route.boardId || value.places[route.toPlaceId].boardId !== route.boardId ||
-        !value.boards[route.boardId].placeIds.includes(route.fromPlaceId) || !value.boards[route.boardId].placeIds.includes(route.toPlaceId) ||
-        route.fromPlaceId === route.toPlaceId || !Object.hasOwn(ROUTE_TYPES, route.type) || typeof route.name !== 'string') throw new Error('Invalid route data');
-  }
-  return value;
-}
 
 let atlas = loadAtlas();
+const history = createHistory(atlas);
+let biomeEditor = null;
+let territoryEditor = null;
 let currentBoardId = atlas.rootBoardId;
 let selectedPlaceId = null;
 let selectedRouteId = null;
@@ -162,20 +135,24 @@ let visibleRoutes = new Map();
 let visibleBoards = new Map();
 let flyAnimation = null;
 let generatorBoardId = null;
-let settlementPreview = null;
+let generationPreview = null;
 let eventDraftPlaceId = null;
 
 function board() { return atlas.boards[currentBoardId]; }
 function place(id) { return atlas.places[id]; }
 function route(id) { return atlas.routes[id]; }
 function worldConflict(target, seed=target.worldSeed || target.name) {
-  return target.kind === 'world' ? worldIslandConflicts(worldRealms(target,atlas),seed)[0] : null;
+  return target.kind === 'world' && atlas.worlds?.[target.id]?.mode !== 'independent' ? worldIslandConflicts(worldRealms(target,atlas),seed)[0] : null;
 }
-function scheduleSave() {
+function scheduleSave(options = {}) {
+  const active = document.activeElement;
+  const mergeKey = active?.matches('input:not([type=checkbox]), textarea') ? active.id + ':' + (selectedPlaceId || selectedRouteId || '') : null;
+  if (options.record !== false) history.record(atlas, {mergeKey, ...options});
+  updateHistoryButtons();
   els.saveStatus.textContent = 'Saving…';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(atlas)); els.saveStatus.textContent = 'Saved in this browser'; }
+    try { localStorage.setItem(STORAGE_KEY, serializeAtlas(atlas)); els.saveStatus.textContent = 'Saved in this browser'; }
     catch (error) { els.saveStatus.textContent = 'Save failed — export a backup'; toast('Browser storage is full. Export a backup.'); }
   }, 250);
 }
@@ -183,9 +160,30 @@ function toast(message) {
   els.toast.textContent = message; els.toast.classList.add('show'); clearTimeout(toastTimer);
   toastTimer = setTimeout(() => els.toast.classList.remove('show'), 3100);
 }
+
+function updateHistoryButtons() {
+  $('#undo-button').disabled = !history.canUndo;
+  $('#redo-button').disabled = !history.canRedo;
+}
+function restoreHistory(direction) {
+  if (gesture || document.querySelector('dialog[open]')) return;
+  biomeEditor?.cancelDraft();
+  territoryEditor?.cancelDraft();
+  const command = history[direction]();
+  if (!command) return;
+  atlas = command.atlas;
+  if (!atlas.boards[currentBoardId]) currentBoardId = atlas.rootBoardId;
+  selectedPlaceId = null; selectedRouteId = null; placingType = null;
+  connectMode = false; connectFromId = null; updateConnectUI();
+  if (flyAnimation) { cancelAnimationFrame(flyAnimation); flyAnimation = null; }
+  render(); scheduleSave({record:false}); toast(`${direction === 'undo' ? 'Undid' : 'Redid'}: ${command.label}`);
+}
+$('#undo-button').addEventListener('click', () => restoreHistory('undo'));
+$('#redo-button').addEventListener('click', () => restoreHistory('redo'));
+document.addEventListener('focusout', () => history.breakGroup());
 function defaultCamera() {
   const root=atlas.boards[atlas.rootBoardId];
-  const bounds=worldLandShape(worldRealms(root,atlas),root.worldSeed || root.name).bounds;
+  const bounds=worldLandShape(worldRealms(root,atlas),root.worldSeed || root.name,atlas.worlds?.[root.id]).bounds;
   const scale = Math.min(1,(els.wrap.clientWidth-30)/bounds.width,(els.wrap.clientHeight-30)/bounds.height);
   return {
     x:(els.wrap.clientWidth-bounds.width*scale)/2-bounds.x*scale,
@@ -196,6 +194,8 @@ function defaultCamera() {
 function baseScale() { return Math.max(.45,Math.min(1,(els.wrap.clientWidth-30)/1010)); }
 function maxScale() { return baseScale() * ZOOM_STEP ** MAX_DEPTH; }
 function renderCamera() {
+  biomeEditor?.draw();
+  territoryEditor?.draw();
   const depth = levelAtScale(camera.scale, baseScale());
   const names = ['WORLD', 'CONTINENT', 'PROVINCE', 'SETTLEMENT', 'INTERIOR'];
   const whole = Math.min(MAX_DEPTH, Math.floor(depth));
@@ -315,6 +315,7 @@ function contextBoardAt(point, depth) {
   return bestId || currentBoardId;
 }
 function refreshContext() {
+  if(biomeEditor?.active||territoryEditor?.active)return;
   if (flyAnimation) return;
   const level = levelAtScale(camera.scale, baseScale());
   const depth = Math.min(MAX_DEPTH, Math.floor(level) + (blend(level % 1) > 0.5 ? 1 : 0));
@@ -325,7 +326,7 @@ function refreshContext() {
     if (connectFromId && place(connectFromId)?.boardId !== next) { connectFromId = null; updateConnectUI(); }
     renderNavigation(); renderPalette(); renderInspector(); renderHeader();
   }
-  els.hint.hidden = board().placeIds.length > 0 || !!board().baseMap;
+  els.hint.hidden = board().placeIds.length > 0 || !!board().baseMap || atlas.worlds?.[board().id]?.mode==='independent';
 }
 function makeCard(id) {
   const item = place(id), card = document.createElement('div');
@@ -479,7 +480,7 @@ function renderInspector() {
     const option = document.createElement('option'); option.value = item.type; option.textContent = TYPES[item.type].label; els.type.append(option);
   }
   els.type.value = item.type;
-  els.realmOptions.hidden = item.type !== 'continent';
+  els.realmOptions.hidden = item.type !== 'continent' || atlas.worlds?.[item.boardId]?.mode === 'independent';
   if (item.type === 'continent') { els.realmBiome.value = item.biome || 'mixed'; els.realmIsland.checked = !!item.island; }
   els.enter.textContent = 'Zoom into this place ↘';
   els.enter.hidden = !ENTERABLE.has(item.type);
@@ -505,6 +506,11 @@ function renderEvents(item) {
   if (!item.events?.length) { const hint = document.createElement('p'); hint.className = 'event-empty'; hint.textContent = 'Pin discoveries and encounters to this place.'; list.append(hint); }
 }
 function renderHeader() {
+  biomeEditor?.refresh();
+  territoryEditor?.refresh();
+  $('#show-territories-field').hidden = currentBoardId!==atlas.rootBoardId || atlas.worlds?.[atlas.rootBoardId]?.mode!=='independent';
+  $('#show-territories').checked = atlas.worlds?.[atlas.rootBoardId]?.showTerritories!==false;
+  $('#upgrade-atlas').hidden = atlas.schemaVersion !== 1;
   els.title.textContent = board().name;
   els.kind.textContent = `${TYPES[board().kind]?.label || 'Map'} map`.toUpperCase();
   els.wrap.dataset.mapKind = board().kind;
@@ -552,15 +558,41 @@ function generatorPlan(boardId, seed, size) {
   return planDetails(target.kind, seed, size, target.placeIds.map(place).filter(Boolean));
 }
 function updateGeneratorPreview() {
-  settlementPreview = null;
+  generationPreview?.cancel(); generationPreview = null;
   if (!generatorBoardId || !atlas.boards[generatorBoardId]) return;
   const seed = els.generatorSeed.value.trim();
   const target = atlas.boards[generatorBoardId];
+  if (target.kind === 'world' && $('#generator-world-mode').value === 'independent') {
+    try {
+      const settings = {preset:$('#continent-preset').value};
+      for (const key of ['width','height','centerX','centerY','roughness']) settings[key] = Number($('#continent-'+key).value);
+      const result = previewContinent(atlas,target.id,seed,settings,{natural:false,keepCoastline:$('#continent-keep').checked});
+      generationPreview = result.transaction;
+      const candidate = generationPreview.candidate;
+      els.generatorMapPreview.innerHTML = artworkForBoard(candidate.boards[target.id],candidate);
+      const svg=els.generatorMapPreview.firstElementChild;
+      for(const realm of worldRealms(target,atlas)) {
+        const marker=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        marker.setAttribute('cx',realm.x);marker.setAttribute('cy',realm.y);
+        marker.setAttribute('r','7');marker.setAttribute('fill','#573e2d');
+        const title=document.createElementNS('http://www.w3.org/2000/svg','title');title.textContent=realm.name;
+        marker.append(title);svg.append(marker);
+      }
+      els.generatorPreview.textContent = 'Independent continent preview. Realm positions, names and campaign content stay fixed. Realm biome/island controls stop shaping terrain. ' +
+        (atlas.schemaVersion === 1 ? 'Applying also upgrades the atlas to format 2. ' : '') +
+        (result.offshore.length ? result.offshore.length+' realm center(s) fall in water: '+result.offshore.join(', ')+'. Adjust the dimensions, center or seed if needed.' : 'All existing realm centers lie on land.');
+      els.generatorApply.disabled = false;
+    } catch(error) {
+      els.generatorMapPreview.replaceChildren(); els.generatorPreview.textContent = error.message; els.generatorApply.disabled = true;
+    }
+    return;
+  }
   if (target.kind === 'world') {
     const conflict = seed && worldConflict(target, seed);
     els.generatorMapPreview.innerHTML = seed ? artworkForBoard({ ...target, worldSeed: seed }, atlas) : '';
     els.generatorPreview.textContent = conflict ? `${conflict} Move the island farther away or try another seed.` : seed ? 'New bays, peninsulas and coastal details. Inland islands sit in lakes; coastal islands keep a water gap. Realm positions, landscapes and names stay in place.' : 'Enter a seed to preview the world.';
-    els.generatorApply.disabled = !seed || !!conflict;
+    if (seed && !conflict) generationPreview = createPreview(atlas, draft => { draft.boards[target.id].worldSeed = seed; }, validateAtlas);
+    els.generatorApply.disabled = !generationPreview;
     return;
   }
   if (target.kind === 'town' || target.kind === 'village') {
@@ -568,13 +600,14 @@ function updateGeneratorPreview() {
     let plan;
     try {
       plan = seed ? planSettlement(target, atlas.places, seed, els.generatorSize.value, {
+        decorationSeed: $('#generator-decoration-seed').value.trim() || undefined,
         type: $('#generator-village-type').value, keepGeography: $('#generator-keep-geography').checked,
       }) : null;
     } catch (error) {
       els.generatorMapPreview.replaceChildren(); els.generatorPreview.textContent = error.message;
       els.generatorApply.disabled = true; return;
     }
-    settlementPreview = plan;
+    if (plan) generationPreview = createPreview(atlas, draft => applySettlement(draft.boards[target.id], draft.places, plan), validateAtlas);
     const base = plan?.base;
     els.generatorMapPreview.innerHTML = base ? artworkForBoard({ ...target, baseMap: base }, atlas) : '';
     if (base) for (const [pid, index] of Object.entries(plan.indices)) {
@@ -609,11 +642,12 @@ function updateGeneratorPreview() {
     'There is no open space for more places on this map.' : target.kind === 'house' ?
     `Adds ${plan.length} rooms and connecting passages. Existing rooms stay in place.` :
     `Adds ${plan.length} places, including ${houses} houses with ${rooms} rooms, and connecting paths. Existing places stay in place.`;
-  els.generatorApply.disabled = !plan.length;
+  if (plan.length) generationPreview = createPreview(atlas, draft => populateGeneratedBoard(target.id, plan, seed, draft), validateAtlas);
+  els.generatorApply.disabled = !generationPreview;
 }
-function populateGeneratedBoard(boardId, plan, seed) {
-  const target = atlas.boards[boardId];
-  const prior = target.placeIds.map(place).filter(Boolean);
+function populateGeneratedBoard(boardId, plan, seed, destination = atlas) {
+  const target = destination.boards[boardId];
+  const prior = target.placeIds.map(id => destination.places[id]).filter(Boolean);
   for (const [index, spec] of plan.entries()) {
     let nearest = null, best = Infinity;
     for (const candidate of prior) {
@@ -623,20 +657,20 @@ function populateGeneratedBoard(boardId, plan, seed) {
     const item = makePlace(boardId, spec.type, spec.name, spec.x, spec.y);
     item.description = spec.description;
     item.provenance = { kind: 'generator', seed, sessionRefs: [] };
-    atlas.places[item.id] = item; target.placeIds.push(item.id);
+    destination.places[item.id] = item; target.placeIds.push(item.id);
     if (nearest) {
       const type = target.kind === 'house' ? 'passage' : target.kind === 'village' ? 'trail' : 'road';
       const name = type === 'passage' ? 'Doorway' : type === 'trail' ? 'Footpath' : 'Town lane';
       const connection = makeRoute(boardId, nearest.id, item.id, type, name);
       connection.provenance = { kind: 'generator', seed, sessionRefs: [] };
-      atlas.routes[connection.id] = connection;
+      destination.routes[connection.id] = connection;
     }
     prior.push(item);
     if (item.type === 'house') {
       const child = makeBoard(item.name, 'house', item.id);
-      item.childBoardId = child.id; atlas.boards[child.id] = child;
+      item.childBoardId = child.id; destination.boards[child.id] = child;
       const childSeed = `${seed}:${index}`;
-      populateGeneratedBoard(child.id, planDetails('house', childSeed, 'standard'), childSeed);
+      populateGeneratedBoard(child.id, planDetails('house', childSeed, 'standard'), childSeed, destination);
     }
   }
 }
@@ -667,7 +701,7 @@ function deletePlace() {
   const target = atlas.boards[item.boardId];
   const conflict = worldConflict({...target,placeIds:target.placeIds.filter(pid=>pid!==item.id)});
   if (conflict) { toast(`${conflict} Move the island before removing this realm.`); return; }
-  const message = item.childBoardId ? `Delete ${item.name} and its detail map? This cannot be undone.` : `Delete ${item.name}?`;
+  const message = item.childBoardId ? `Delete ${item.name} and its detail map? You can undo this change.` : `Delete ${item.name}?`;
   if (!confirm(message)) return;
   const removedIds = new Set();
   function removeDescendants(pid) {
@@ -680,6 +714,7 @@ function deletePlace() {
   }
   atlas.boards[item.boardId].placeIds = atlas.boards[item.boardId].placeIds.filter(pid => pid !== item.id);
   removeDescendants(item.id);
+  for(const world of Object.values(atlas.worlds||{}))for(const [id,territory]of Object.entries(world.territories))if(removedIds.has(territory.realmId))delete world.territories[id];
   for (const [rid, connection] of Object.entries(atlas.routes)) {
     if (removedIds.has(connection.fromPlaceId) || removedIds.has(connection.toPlaceId)) delete atlas.routes[rid];
   }
@@ -758,6 +793,10 @@ els.wrap.addEventListener('pointermove', (event) => {
 });
 function endGesture(event) {
   if (!gesture || gesture.pointerId !== event.pointerId) return;
+  if (event.type === 'pointercancel' && gesture.kind === 'place') {
+    gesture.item.x = gesture.x; gesture.item.y = gesture.y;
+    gesture.moved = false; layoutDirty = true; renderCamera();
+  }
   if (gesture.kind === 'place' && gesture.moved) {
     const conflict = worldConflict(atlas.boards[gesture.item.boardId]);
     if (conflict) {
@@ -836,6 +875,9 @@ els.name.addEventListener('input', () => {
 els.type.addEventListener('change', () => {
   const item = place(selectedPlaceId); if (!item) return;
   const nextType = els.type.value;
+  if(item.type==='continent'&&nextType!=='continent'&&Object.values(atlas.worlds?.[item.boardId]?.territories||{}).some(t=>t.realmId===item.id)) {
+    els.type.value=item.type;toast('Delete or reassign this realm’s territories before changing its type.');return;
+  }
   const previousType = item.type;
   item.type = nextType;
   const conflict = worldConflict(atlas.boards[item.boardId]);
@@ -854,7 +896,9 @@ els.type.addEventListener('change', () => {
 });
 $('#keep-place').addEventListener('change', () => {
   const item = place(selectedPlaceId); if (!item) return;
-  item.keepPlace = $('#keep-place').checked; scheduleSave();
+  item.keepPlace = $('#keep-place').checked;
+  if (atlas.schemaVersion === 2) item.protected = item.keepPlace;
+  scheduleSave();
 });
 els.realmBiome.addEventListener('change', () => {
   const item = place(selectedPlaceId); if (!item || item.type !== 'continent') return;
@@ -903,14 +947,29 @@ $('#delete-place').addEventListener('click', deletePlace);
 $('#close-inspector').addEventListener('click', () => selectPlace(null));
 $('#add-place').addEventListener('click', () => { els.palette.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); toast('Choose a place from the left, then click the map'); });
 els.generateButton.addEventListener('click', () => {
+  biomeEditor?.cancelDraft();
+  territoryEditor?.cancelDraft();
   if (!['world','town','village','house'].includes(board().kind)) return;
   generatorBoardId = currentBoardId;
   els.generatorTitle.textContent = board().kind === 'world' ? `Generate ${board().name}` : board().kind === 'house' ? `Fill ${board().name} with rooms` : `Generate ${board().name}`;
   els.generatorIntro.textContent = board().kind === 'world' ?
-    'Try a new connected coastline and terrain pattern. Mainland realms remain joined; islands stay separate.' : board().kind === 'house' ?
+    'Preview a new coastline. Choose Independent continent to generate land from a seed and preset, separately from your realms.' : board().kind === 'house' ?
     'Create a repeatable room layout with passages. Your existing rooms and notes stay where they are.' :
     'Choose the landscape and preview a new layout. Kept places stay fixed. Names, notes, events and interiors are always retained.';
   els.generatorApply.textContent = board().kind === 'world' ? 'Use this world map' : board().kind === 'house' ? 'Add rooms' : 'Use these surroundings';
+  $('#generator-world-options').hidden = board().kind !== 'world';
+  const independent = atlas.worlds?.[board().id]?.mode === 'independent';
+  $('#generator-world-mode').value = 'independent';
+  $('#generator-world-mode').disabled = true;
+  const settings = atlas.worlds?.[board().id]?.settings || DEFAULT_CONTINENT;
+  $('#continent-preset').value = settings.preset;
+  for (const key of ['width','height','centerX','centerY','roughness']) $('#continent-'+key).value = settings[key];
+  $('#continent-settings').hidden = false;
+  $('#continent-keep-field').hidden = !independent;
+  $('#continent-keep').checked = false;
+  updateCoastControls();
+  $('#generator-decoration-field').hidden = !['town','village'].includes(board().kind);
+  $('#generator-decoration-seed').value = board().baseMap?.decorationSeed || '';
   $('#generator-size-field').hidden = board().kind === 'world';
   $('#generator-geography-options').hidden = board().kind !== 'village';
   $('#generator-village-type').value = villageType(board().baseMap);
@@ -921,6 +980,15 @@ els.generateButton.addEventListener('click', () => {
 });
 els.generatorSeed.addEventListener('input', updateGeneratorPreview);
 els.generatorSize.addEventListener('change', updateGeneratorPreview);
+$('#generator-world-mode').addEventListener('change', () => {
+  $('#continent-settings').hidden = $('#generator-world-mode').value !== 'independent'; updateGeneratorPreview();
+});
+function updateCoastControls() {
+  for(const key of ['preset','width','height','centerX','centerY','roughness']) $('#continent-'+key).disabled=$('#continent-keep').checked;
+}
+$('#continent-keep').addEventListener('change',()=>{updateCoastControls();updateGeneratorPreview();});
+for (const id of ['continent-preset','continent-width','continent-height','continent-centerX','continent-centerY','continent-roughness']) $('#'+id).addEventListener('change',updateGeneratorPreview);
+$('#generator-decoration-seed').addEventListener('input', updateGeneratorPreview);
 $('#generator-village-type').addEventListener('change', updateGeneratorPreview);
 $('#generator-keep-geography').addEventListener('change', () => {
   if ($('#generator-keep-geography').checked) $('#generator-village-type').value = villageType(atlas.boards[generatorBoardId]?.baseMap);
@@ -929,33 +997,18 @@ $('#generator-keep-geography').addEventListener('change', () => {
 $('#generator-reroll').addEventListener('click', () => { els.generatorSeed.value = crypto.randomUUID().slice(0, 8); updateGeneratorPreview(); });
 $('#generator-close').addEventListener('click', () => els.generatorDialog.close());
 $('#generator-cancel').addEventListener('click', () => els.generatorDialog.close());
+els.generatorDialog.addEventListener('close', () => {
+  generationPreview?.cancel(); generationPreview = null; generatorBoardId = null;
+});
 els.generatorApply.addEventListener('click', () => {
-  if (!generatorBoardId || !atlas.boards[generatorBoardId]) return;
-  const seed = els.generatorSeed.value.trim();
-  const target = atlas.boards[generatorBoardId];
-  if (target.kind === 'world') {
-    if (!seed) return;
-    const conflict = worldConflict(target,seed);
-    if (conflict) { toast(conflict); return; }
-    target.worldSeed = seed;
-    els.generatorDialog.close(); generatorBoardId = null;
-    renderPlaces(); renderHeader(); scheduleSave(); toast('World coastline regenerated');
-    return;
-  }
-  if (target.kind === 'town' || target.kind === 'village') {
-    if (!seed) return;
-    if (!settlementPreview) return;
-    applySettlement(target, atlas.places, settlementPreview);
-    els.generatorDialog.close(); generatorBoardId = null;
-    render(); scheduleSave(); toast(`${target.baseMap.layers.buildings.length} buildings generated`);
-    return;
-  }
-  if (!seed || generatedBefore(generatorBoardId, seed)) { updateGeneratorPreview(); return; }
-  const plan = generatorPlan(generatorBoardId, seed, els.generatorSize.value);
-  if (!plan.length) { updateGeneratorPreview(); return; }
-  populateGeneratedBoard(generatorBoardId, plan, seed);
-  els.generatorDialog.close(); generatorBoardId = null;
-  render(); scheduleSave(); toast(`${plan.length} places added to ${board().name}`);
+  if (!generationPreview) return;
+  try {
+    const wasWorld = board().kind === 'world';
+    atlas = generationPreview.apply(atlas);
+    if (wasWorld) camera = defaultCamera();
+    els.generatorDialog.close();
+    render(); scheduleSave({manual:false, label:'Generate map'}); toast('Preview applied');
+  } catch (error) { toast(error.message); }
 });
 $('#village-example').addEventListener('click', () => {
   const villageId = addVillageExample(atlas);
@@ -973,7 +1026,7 @@ $('#new-atlas-button').addEventListener('click', () => {
   if (!confirm('Start a new example atlas? This replaces the atlas saved in this browser. Export a backup first if you want to keep it.')) return;
   atlas = starterAtlas(); currentBoardId = atlas.rootBoardId; selectedPlaceId = null; selectedRouteId = null; placingType = null;
   connectMode = false; connectFromId = null; updateConnectUI();
-  camera = defaultCamera(); render(); scheduleSave(); toast('New atlas created');
+  camera = defaultCamera(); render(); scheduleSave({manual:false, label:'New atlas'}); toast('New atlas created');
 });
 $('#rename-board').addEventListener('click', () => {
   const name = prompt('Map name', board().name)?.trim(); if (!name) return;
@@ -989,13 +1042,30 @@ $('#zoom-out').addEventListener('click', () => {
 });
 $('#zoom-reset').addEventListener('click', () => { camera = defaultCamera(); renderCamera(); });
 $('#export-button').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(atlas, null, 2)], { type: 'application/json' });
+  const blob = new Blob([serializeAtlas(atlas, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob); const link = document.createElement('a');
   link.href = url; link.download = `mapmaker-atlas-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast('Atlas exported');
 });
 $('#import-button').addEventListener('click', () => els.importInput.click());
+let atlasUpgradePreview = null;
+$('#upgrade-atlas').addEventListener('click', () => {
+  try {
+    atlasUpgradePreview = previewAtlasUpgrade(atlas);
+    atlasUpgradePreview.transaction = createPreview(atlas, draft => Object.assign(draft, atlasUpgradePreview.atlas), validateAtlas);
+    $('#upgrade-summary').textContent = atlasUpgradePreview.summary;
+    $('#upgrade-dialog').showModal();
+  } catch (error) { toast(`Cannot upgrade atlas: ${error.message}`); }
+});
+$('#upgrade-cancel').addEventListener('click', () => $('#upgrade-dialog').close());
+$('#upgrade-dialog').addEventListener('close', () => { atlasUpgradePreview?.transaction.cancel(); atlasUpgradePreview = null; });
+$('#upgrade-apply').addEventListener('click', () => {
+  if (!atlasUpgradePreview) return;
+  atlas = atlasUpgradePreview.transaction.apply(atlas);
+  $('#upgrade-dialog').close();
+  render(); scheduleSave({manual:false, label:'Upgrade atlas'}); toast('Atlas format upgraded; geography preserved');
+});
 els.importInput.addEventListener('change', async () => {
   const file = els.importInput.files?.[0]; if (!file) return;
   try {
@@ -1003,7 +1073,7 @@ els.importInput.addEventListener('change', async () => {
     if (!confirm('Replace the current atlas with this file? Export a backup first if you want to keep it.')) return;
     atlas = next; currentBoardId = atlas.rootBoardId; selectedPlaceId = null; selectedRouteId = null; placingType = null;
     connectMode = false; connectFromId = null; updateConnectUI();
-    camera = defaultCamera(); render(); scheduleSave(); toast('Atlas imported');
+    camera = defaultCamera(); render(); scheduleSave({manual:false, label:'Import atlas'}); toast('Atlas imported');
   } catch (error) { toast('This file is not a valid MapMaker atlas'); }
   finally { els.importInput.value = ''; }
 });
@@ -1012,6 +1082,16 @@ $('#help-button').addEventListener('click', () => helpDialog.showModal());
 $('#help-close').addEventListener('click', () => helpDialog.close());
 $('#help-done').addEventListener('click', () => helpDialog.close());
 document.addEventListener('keydown', event => {
+  if(document.querySelector('dialog[open]'))return;
+  if(biomeEditor?.key(event)){event.preventDefault();return;}
+  if(territoryEditor?.key(event)){event.preventDefault();return;}
+  const typing = event.target.closest('input, textarea, select, [contenteditable=true]');
+  if (!typing && (event.ctrlKey || event.metaKey) && !event.altKey && ['z','y'].includes(event.key.toLowerCase())) {
+    event.preventDefault();
+    restoreHistory(event.key.toLowerCase() === 'y' || event.shiftKey ? 'redo' : 'undo');
+    return;
+  }
+  if (document.querySelector('dialog[open]')) return;
   if (event.key === 'Escape') { placingType = null; connectMode = false; connectFromId = null; updateConnectUI(); renderPalette(); selectPlace(null); }
   if ((event.key === 'Delete' || event.key === 'Backspace') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
     if (selectedRouteId) deleteRoute(); else if (selectedPlaceId) deletePlace();
@@ -1019,4 +1099,40 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('resize', () => renderCamera());
 
-camera = defaultCamera(); render(); scheduleSave();
+biomeEditor = installBiomeEditor({
+  getWorld:()=>currentBoardId===atlas.rootBoardId?atlas.worlds?.[atlas.rootBoardId]:null,
+  getCamera:()=>camera,toWorld:screenToWorld,wrap:els.wrap,button:$('#edit-biomes'),
+  onActivate:()=>{
+    territoryEditor?.close();
+    selectedPlaceId=null;selectedRouteId=null;placingType=null;connectMode=false;connectFromId=null;
+    if(flyAnimation){cancelAnimationFrame(flyAnimation);flyAnimation=null;}
+    updateConnectUI();renderInspector();
+  },
+  pan:(dx,dy)=>{camera.x+=dx;camera.y+=dy;renderCamera();},
+  commit:(change,label)=>{
+    const next=structuredClone(atlas);change(next.worlds[next.rootBoardId]);
+    atlas=validateAtlas(next);render();scheduleSave({manual:false,label});
+  },
+});
+
+territoryEditor = installBiomeEditor({
+  layer:'territories',getWorld:()=>currentBoardId===atlas.rootBoardId?atlas.worlds?.[atlas.rootBoardId]:null,
+  getRealms:()=>atlas.boards[atlas.rootBoardId].placeIds.map(id=>atlas.places[id]).filter(p=>p?.type==='continent'),
+  getCamera:()=>camera,toWorld:screenToWorld,wrap:els.wrap,button:$('#edit-territories'),
+  onActivate:()=>{
+    biomeEditor?.close();selectedPlaceId=null;selectedRouteId=null;placingType=null;connectMode=false;connectFromId=null;
+    if(flyAnimation){cancelAnimationFrame(flyAnimation);flyAnimation=null;}
+    updateConnectUI();renderInspector();
+  },
+  pan:(dx,dy)=>{camera.x+=dx;camera.y+=dy;renderCamera();},
+  commit:(change,label)=>{
+    const next=structuredClone(atlas);change(next.worlds[next.rootBoardId]);
+    atlas=validateAtlas(next);render();scheduleSave({manual:false,label});
+  },
+});
+$('#show-territories').addEventListener('change',()=>{
+  const world=atlas.worlds?.[atlas.rootBoardId];if(!world)return;
+  world.showTerritories=$('#show-territories').checked;render();scheduleSave({manual:false,label:'Toggle borders'});
+});
+
+camera = defaultCamera(); render(); scheduleSave({record:false});

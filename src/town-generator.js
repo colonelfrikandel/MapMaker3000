@@ -1,3 +1,4 @@
+import { seedStream } from './seeds.js';
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 // Original, seeded settlement geometry. Coordinates are local to a 1010 × 630 board.
 const W = 1010, H = 630;
@@ -35,7 +36,7 @@ function line(points, width) { return { points: points.map(([x,y]) => point(x,y)
 export function generateTownBase(kind, seed, size = 'standard', reserved = [], options = {}) {
   if (!['town', 'village'].includes(kind) || !['small', 'standard', 'large'].includes(size)) throw new Error('Invalid town settings');
   if (kind === 'village') return generateVillage(seed, size, reserved, options);
-  const rng = randomFor(`${kind}:${seed.trim()}:${size}`);
+  let rng = randomFor(`${kind}:${seed.trim()}:${size}`);
   const town = kind === 'town';
   const factor = { small: .74, standard: 1, large: 1.18 }[size];
   const cx = 505 + (rng()-.5)*70, cy = 314 + (rng()-.5)*42;
@@ -77,6 +78,7 @@ export function generateTownBase(kind, seed, size = 'standard', reserved = [], o
   }
   if (town) layers.walls.push(Array.from({length:64},(_,i)=>onRing(phase+i*Math.PI*2/64,.99)));
 
+  rng = seedStream(`${kind}:${seed.trim()}:${size}`, 'buildings');
   // Lots are laid out along the streets. Each footprint is its own editable target.
   const bandRadii = town ? [.45,.74,1.08] : [.62,1.09];
   const counts = town ? [54,86,96] : [38,52];
@@ -101,16 +103,18 @@ export function generateTownBase(kind, seed, size = 'standard', reserved = [], o
     if (x<25 || x>W-25 || y<25 || y>H-25) continue;
     layers.buildings.push(rectangle(x,y,12+rng()*14,9+rng()*8,a+(rng()-.5)*.4));
   }
+  rng = seedStream(`${kind}:${seed.trim()}:${size}`, 'fields');
   for (let i=0;i<14;i++) {
     const a=phase+i*Math.PI*2/14;
     const [x,y]=onRing(a,1.48);
     layers.fields.push(rectangle(x,y,30+rng()*32,13+rng()*17,a));
   }
+  rng = seedStream(options.decorationSeed ?? seed, 'vegetation');
   for (let i=0;i<75;i++) {
     const x=25+rng()*(W-50), y=25+rng()*(H-50);
     const d=((x-cx)/rx)**2+((y-cy)/ry)**2;
     if (d>1.1 && d<2.5) layers.trees.push(point(x,y));
   }
-  const base = { source:'mapmaker-generated', version:'1', seed, size, layers };
+  const base = { source:'mapmaker-generated', version:'2', seed, size, decorationSeed:options.decorationSeed ?? seed, layers };
   return base;
 }

@@ -1,3 +1,4 @@
+import { seedStream } from './seeds.js';
 // Terrain and connected lanes precede roadside plots. Saved geography can be reused.
 import { geographyFor, clearOfGeography, containsPoint, polygonDistance, seededRandom as random } from './settlement-geography.js';
 const point = (x,y) => [Math.round(x*10)/10, Math.round(y*10)/10];
@@ -22,7 +23,7 @@ export function roadDistance(x,y,roads) {
 }
 
 export function generateVillage(seed,size='standard',reserved=[],options={}) {
-  const rng=random(`${seed.trim()}:${size}`);
+  let rng=seedStream(`${seed.trim()}:${size}`, 'buildings');
   const geography=options.geography || geographyFor(options.type || 'river',seed.trim());
   const layers={ earth:[],buildings:structuredClone(reserved),prisms:[],fields:[],trees:[],...structuredClone(geography.layers) };
   const avoid=options.avoid || [];
@@ -42,6 +43,7 @@ export function generateVillage(seed,size='standard',reserved=[],options={}) {
       if (free(polygon)) layers.buildings.push(polygon);
     }
   }
+  rng=seedStream(`${seed.trim()}:${size}`, 'fields');
   for (let i=0;i<100;i++) {
     const x=55+rng()*900,y=50+rng()*530;
     if (roadDistance(x,y,layers.roads)<75) continue;
@@ -49,11 +51,12 @@ export function generateVillage(seed,size='standard',reserved=[],options={}) {
     if (free(field)) layers.fields.push(field);
     if (layers.fields.length>=18) break;
   }
+  rng=seedStream(options.decorationSeed ?? seed, 'vegetation');
   for (let i=0;i<450;i++) {
     const x=20+rng()*970,y=20+rng()*590;
     if (roadDistance(x,y,layers.roads)<27 || layers.water.some(p=>containsPoint(p,[x,y]))) continue;
     const canopy=rectangle(x,y,12,12,0);
     if (!layers.water.some(p=>polygonDistance(canopy,p)<4) && ![...layers.buildings,...layers.fields,...layers.squares,...layers.greens,...avoid].some(p=>overlaps(canopy,p,3))) layers.trees.push(point(x,y));
   }
-  return {source:'mapmaker-generated',version:'3',layout:geography.type,seed,size,layers};
+  return {source:'mapmaker-generated',version:'4',layout:geography.type,seed,size,decorationSeed:options.decorationSeed ?? seed,layers};
 }

@@ -63,7 +63,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .primary-button { border: 1px solid #a1463d; border-radius: 3px; padding: 10px 15px; background: #8f332d; color: #fff0d6; font-size: 12px; font-weight: 700; box-shadow: inset 0 1px #ffffff1f; white-space: nowrap; }
 .primary-button:hover { background: #a14236; }
 .primary-button:disabled { opacity: .5; cursor: not-allowed; }
-.map-header-actions { display: flex; align-items: center; gap: 8px; }
+.map-header-actions { display: flex; flex-wrap:wrap; justify-content:flex-end; align-items: center; gap: 8px; max-width:60%; }
 .secondary-button { border: 1px solid #88704d; border-radius: 3px; padding: 10px 13px; background: #372f25; color: #ead3a9; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .secondary-button:hover { background: #54402d; }
 
@@ -203,3 +203,22 @@ dialog .primary-button { margin-top: 10px; }
   .canvas-tip { display: none; }
   .inspector { top: 52px; bottom: 100px; width: min(88vw, 320px); }
 }
+.biome-editor-overlay { display:none; position:absolute; inset:0; z-index:2; touch-action:none; cursor:crosshair; pointer-events:all; }
+.biome-editor-panel { position:absolute; top:10px; left:10px; z-index:3; width:240px; max-width:calc(100% - 20px); max-height:calc(100% - 65px); overflow:auto; padding:12px; background:#292720f5; border:1px solid #a68454; color:#e8d9bb; box-shadow:0 5px 20px #0008; font-size:12px; }
+.zoom-controls { z-index:4; }
+.biome-editor-panel[hidden] { display:none; }
+.biome-editor-panel label { display:block; margin:8px 0; }
+.biome-editor-panel select,.biome-editor-panel input { display:block; width:100%; box-sizing:border-box; background:#201e18; color:#e8d9bb; border:1px solid #a68454; padding:5px; }
+.biome-actions { display:flex; flex-wrap:wrap; gap:5px; }
+.biome-actions button { background:#57452d; color:#fff0d0; border:1px solid #a68454; padding:5px 7px; cursor:pointer; }
+.biome-actions button:disabled { opacity:.4; cursor:default; }
+.biome-editor-panel p { line-height:1.4; }
+#show-territories-field { font-size:12px; white-space:nowrap; }
+@media (max-width:760px) {
+  .map-header-actions #edit-biomes,.map-header-actions #edit-territories { font-size:11px; }
+  .map-header-actions #edit-biomes::after,.map-header-actions #edit-territories::after { content:none; }
+}
+
+.biome-palette { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin:10px 0; }
+.biome-palette button { cursor:grab; border:2px solid; border-radius:16px; padding:7px; background:#35382b; color:#eee5cd; }
+.biome-palette button:active { cursor:grabbing; }

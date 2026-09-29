@@ -1,6 +1,7 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 // A single world coastline with soft terrain fields shared by neighboring realms.
-import { terrainContours } from './landmass.js?v=gentle-inlets-5';
+import { terrainContours } from './landmass.js?v=biome-circles-1';
+import { independentShape, continentSvg } from './continent.js';
 const COAST_SAMPLES = 256;
 export const ISLAND_WATER_GAP = 18;
 // Extra space accounts for the shoreline strokes on both sides of the water.
@@ -78,7 +79,8 @@ export function worldBounds(realms) {
   return {x:left,y:top,width:right-left,height:bottom-top};
 }
 const shapeCache=new Map();
-export function worldLandShape(realms, seed='world') {
+export function worldLandShape(realms, seed='world', world=null) {
+  if(world?.mode==='independent') return independentShape(world);
   const key=JSON.stringify([seed,realms.map(r=>[r.x,r.y,r.radius,!!r.island])]);
   if(shapeCache.has(key)) return shapeCache.get(key);
   const regions=realms.map(r=>{
@@ -146,7 +148,8 @@ export function worldIslandConflicts(realms,seed='world') {
 
 // Mainland geometry excludes an island and its surrounding water, even when
 // the island lies entirely inside the outer mainland coastline.
-export function worldSurfaceAt({land,landRings=[land],islands},x,y) {
+export function worldSurfaceAt({land,landRings=[land],islands,lakes=[]},x,y) {
+  if(lakes.some(lake=>contains(lake.points,x,y)&&!(lake.holes||[]).some(h=>contains(h,x,y))))return {kind:'water'};
   const islandIndex=islands.findIndex(poly=>contains(poly,x,y));
   if (islandIndex>=0) return {kind:'island',islandIndex};
   for (const poly of islands) {
@@ -156,7 +159,8 @@ export function worldSurfaceAt({land,landRings=[land],islands},x,y) {
   return {kind:landRings.reduce((inside,ring)=>inside!==contains(ring,x,y),false)?'mainland':'water'};
 }
 
-export function worldSvg(realms,seed='world') {
+export function worldSvg(realms,seed='world',world=null) {
+  if(world?.mode==='independent') return continentSvg(world);
   const regions=realms.map(r=>({ ...r, radius:clamp(r.radius||125,65,180), biome:PALETTE[r.biome]?r.biome:'mixed' }));
   const shape=worldLandShape(regions,seed);
   const {land,islands}=shape;
