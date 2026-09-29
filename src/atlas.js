@@ -76,11 +76,12 @@ function validateLayers(atlas) {
   for (const [id, world] of Object.entries(atlas.worlds)) {
     if (atlas.boards[id]?.kind !== 'world' || world?.id !== id || !['legacy-realms','independent'].includes(world.mode)) throw new Error('Invalid world reference or unsupported generation mode');
     if(world.mode==='independent') {
-      if(world.generator?.name!=='continent' || world.generator?.version!=='1') throw new Error('Unsupported world generator');
+      if(world.generator?.name!=='continent' || !['1','2'].includes(world.generator?.version)) throw new Error('Unsupported world generator');
       validateContinentSettings(world.settings);
       if(typeof world.seed!=='string' || !world.seed.trim() || world.seed.length>200) throw new Error('Invalid continent seed');
       if(!Object.values(world.geography || {}).some(item=>item?.type==='coastline')) throw new Error('Missing continent coastline');
     } else if (world.generator?.name !== 'realm-contours' || world.generator?.version !== 'gentle-inlets-5') throw new Error('Unsupported world generator');
+    if(world.forestStyle!=null&&(!record(world.forestStyle)||!Number.isFinite(world.forestStyle.maxAngle)||world.forestStyle.maxAngle<0||world.forestStyle.maxAngle>89))throw new Error('Invalid forest edge angle');
     for (const layer of ['geography', 'biomes', 'territories']) {
       requireRecord(world[layer], layer);
       for (const [objectId, object] of Object.entries(world[layer])) {

@@ -222,3 +222,6 @@ dialog .primary-button { margin-top: 10px; }
 .biome-palette { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin:10px 0; }
 .biome-palette button { cursor:grab; border:2px solid; border-radius:16px; padding:7px; background:#35382b; color:#eee5cd; }
 .biome-palette button:active { cursor:grabbing; }
+
+#session-review { width:min(820px,90vw); max-height:85vh; overflow:auto; background:#292720; color:#eadabc; border:1px solid #a68454; }
+#session-review label {display:block;margin:12px 0} #session-review label:not(.session-choice) input,#session-review textarea {display:block;width:100%;box-sizing:border-box;background:#201e18;color:#eadabc;padding:8px;border:1px solid #a68454} #session-review .session-choice{display:flex;gap:10px;align-items:center} .session-map-comparison{display:grid;grid-template-columns:1fr 1fr;gap:12px}.session-map-comparison svg{width:100%;max-height:260px} #session-review blockquote{font-size:13px;border-left:2px solid #a68454;padding-left:12px}

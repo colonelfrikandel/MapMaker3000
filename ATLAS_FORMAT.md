@@ -203,3 +203,65 @@ vertices. Double-click inserts an anchor on the selected curved edge. Curve and
 control polygon validation reject crossings. Add, move, insert and delete use
 the same undo history and export format as other biome edits. The earlier
 Smooth & merge control is superseded by this sparse-anchor workflow.
+
+### Live environment sampling
+
+`samplePlaceEnvironment` derives the rendered center of a place in world-board
+coordinates using the shared nested layout. It samples visible biome geometry
+(including curved areas, priority and holes), coastline/lake surface, nearby
+water and route lines, and optional saved field values. Proximity uses half
+the place width clamped to 2–40 world units. Resources are biome-based potential
+resources, not campaign facts. Unassigned land has no inferred biome or climate.
+No sampled result is persisted; moving a parent place or editing a biome
+changes the next sample. Legacy worlds return no environment context.
+
+### Settlement styling
+
+Town and village artwork samples the parent settlement center on each render.
+Fixed biome palettes and vegetation glyphs are derived display data, not new
+saved terrain or buildings. Ground fades at map edges; roads, buildings and
+water retain their geometry. Desert courtyard marks are roof decoration.
+No layout or architecture semantics are inferred into campaign records.
+The same saved map and context yield the same SVG. Preview, moving a place,
+biome editing, reload and undo use the same rendering path.
+
+### Reviewed session suggestions
+
+Accepted reviews create a `sessions[id]` record with name, selected place ID,
+source text, timestamp and accepted suggestion IDs. Appended notes retain
+`noteSources`; events and biome circles have `session-suggestion` provenance
+with sessionId, sourceText and acceptedAt. The English keyword parser operates
+on one user-selected place, offers no preselected changes, and suppresses
+ambiguous or negated biome matches. Biome suggestions create a protected
+four-anchor circle, radius 60 world units, above existing priorities.
+Apply uses a validated snapshot preview; stale previews are rejected and
+Cancel changes nothing. Undo/redo includes the session and every accepted edit.
+
+### Continental process generator version 2
+
+New coastline previews use `continent-2` provenance and world generator version
+`2`; version `1` saved geometry remains supported without rerolling. Settings
+may include `drift` and `erosion` in [0,1], defaulting to 0.55 and 0.5 for older
+settings. `landformHistory` records algorithm version, continental block count,
+controls and generation stages. It describes a procedural construction process,
+not geological dates or a physically simulated history.
+
+A shared irregular ancestral field is partitioned by noise-warped nearest-block
+boundaries. Each block is translated/rotated before reassembly. Downhill flow
+accumulation incises the scalar field; local smoothing rounds coastal corners.
+Only bounded marching contours and process metadata are saved, not automatic
+biomes, rivers or elevation grids. Changing seed varies the underlying skeleton
+and block motion. Keep existing coastline retains its geometry and provenance.
+
+### Four-layer forest rendering
+
+Forest sprites are derived from the displayed, unioned forest geometry. The
+original PNG files remain unchanged. Layer order is back trees, solid #555a48
+fill with even-odd holes, sparse interior treetop PNGs clipped to the region,
+then front trees. Local boundary tangents determine eligibility; winding and
+hole status determine front/back. Sprites stay upright. Sampling and counts
+are bounded, and a seeded stream keeps placement stable across reloads.
+Optional `world.forestStyle.maxAngle` stores a finite value from 0 to 89 degrees
+relative to horizontal, default 60. Editor changes are one undoable action.
+Sprite dimensions, spacing and interior density live in FOREST_STYLE in
+`src/forest-renderer.js`; they do not add polygon control points.

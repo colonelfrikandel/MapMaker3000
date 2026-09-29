@@ -1,3 +1,4 @@
+import { installSessionReview } from './session-review-ui.js';
 import { samplePlaceEnvironment, environmentDescription } from './environment.js';
 import { DEFAULT_CONTINENT } from './continent.js';
 import { installBiomeEditor } from './biome-editor-ui.js';
@@ -7,8 +8,8 @@ import { validateAtlas, previewAtlasUpgrade, serializeAtlas } from './atlas.js';
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
 import { planDetails } from './generator.js';
-import { artworkForPlace, artworkForBoard, worldRealms } from './cartography.js?v=biome-circles-1';
-import { worldIslandConflicts, worldLandShape } from './world-generator.js?v=biome-circles-1';
+import { artworkForPlace, artworkForBoard, worldRealms } from './cartography.js?v=layered-forest-1';
+import { worldIslandConflicts, worldLandShape } from './world-generator.js?v=layered-forest-1';
 import { nearestTownFootprint } from './town-base.js';
 import { generateTownBase } from './town-generator.js';
 import { addVillageExample, addCampaignEvent, planSettlement, applySettlement, villageType } from './campaign.js';
@@ -468,6 +469,7 @@ function renderInspector() {
     els.routeNotes.value = connection.notes || '';
   }
   if (!item) return;
+  $('#place-environment').textContent = environmentDescription(samplePlaceEnvironment(atlas,item.id,layout));
   $('#keep-place-field').hidden = atlas.boards[item.boardId]?.kind !== 'village';
   $('#keep-place').checked = item.keepPlace !== false;
   renderEvents(item);
@@ -565,7 +567,7 @@ function updateGeneratorPreview() {
   if (target.kind === 'world' && $('#generator-world-mode').value === 'independent') {
     try {
       const settings = {preset:$('#continent-preset').value};
-      for (const key of ['width','height','centerX','centerY','roughness']) settings[key] = Number($('#continent-'+key).value);
+      for (const key of ['width','height','centerX','centerY','roughness','drift','erosion']) settings[key] = Number($('#continent-'+key).value);
       const result = previewContinent(atlas,target.id,seed,settings,{natural:false,keepCoastline:$('#continent-keep').checked});
       generationPreview = result.transaction;
       const candidate = generationPreview.candidate;
@@ -581,6 +583,8 @@ function updateGeneratorPreview() {
       els.generatorPreview.textContent = 'Independent continent preview. Realm positions, names and campaign content stay fixed. Realm biome/island controls stop shaping terrain. ' +
         (atlas.schemaVersion === 1 ? 'Applying also upgrades the atlas to format 2. ' : '') +
         (result.offshore.length ? result.offshore.length+' realm center(s) fall in water: '+result.offshore.join(', ')+'. Adjust the dimensions, center or seed if needed.' : 'All existing realm centers lie on land.');
+      const process=candidate.worlds[target.id].landformHistory;
+      if(process)els.generatorPreview.textContent += ' Shape history: '+process.plateCount+' continental blocks, '+Math.round(process.drift*100)+'% separation, '+Math.round(process.erosion*100)+'% erosion. Land only; biomes remain manual.';
       els.generatorApply.disabled = false;
     } catch(error) {
       els.generatorMapPreview.replaceChildren(); els.generatorPreview.textContent = error.message; els.generatorApply.disabled = true;
@@ -820,7 +824,7 @@ function endGesture(event) {
     }
     const terrain = visibleBoards.get(gesture.item.boardId);
     if (terrain) { terrain.remove(); visibleBoards.delete(gesture.item.boardId); }
-    renderCamera(); renderHeader(); scheduleSave();
+    renderPlaces(); renderHeader(); renderInspector(); scheduleSave();
   }
   gesture.card?.classList.remove('dragging');
   if (gesture.moved) lastDragEnd = performance.now();
@@ -963,7 +967,7 @@ els.generateButton.addEventListener('click', () => {
   $('#generator-world-mode').disabled = true;
   const settings = atlas.worlds?.[board().id]?.settings || DEFAULT_CONTINENT;
   $('#continent-preset').value = settings.preset;
-  for (const key of ['width','height','centerX','centerY','roughness']) $('#continent-'+key).value = settings[key];
+  for (const key of ['width','height','centerX','centerY','roughness','drift','erosion']) $('#continent-'+key).value = settings[key] ?? DEFAULT_CONTINENT[key];
   $('#continent-settings').hidden = false;
   $('#continent-keep-field').hidden = !independent;
   $('#continent-keep').checked = false;
@@ -984,10 +988,10 @@ $('#generator-world-mode').addEventListener('change', () => {
   $('#continent-settings').hidden = $('#generator-world-mode').value !== 'independent'; updateGeneratorPreview();
 });
 function updateCoastControls() {
-  for(const key of ['preset','width','height','centerX','centerY','roughness']) $('#continent-'+key).disabled=$('#continent-keep').checked;
+  for(const key of ['preset','width','height','centerX','centerY','roughness','drift','erosion']) $('#continent-'+key).disabled=$('#continent-keep').checked;
 }
 $('#continent-keep').addEventListener('change',()=>{updateCoastControls();updateGeneratorPreview();});
-for (const id of ['continent-preset','continent-width','continent-height','continent-centerX','continent-centerY','continent-roughness']) $('#'+id).addEventListener('change',updateGeneratorPreview);
+for (const id of ['continent-preset','continent-width','continent-height','continent-centerX','continent-centerY','continent-roughness','continent-drift','continent-erosion']) $('#'+id).addEventListener('change',updateGeneratorPreview);
 $('#generator-decoration-seed').addEventListener('input', updateGeneratorPreview);
 $('#generator-village-type').addEventListener('change', updateGeneratorPreview);
 $('#generator-keep-geography').addEventListener('change', () => {
@@ -1136,3 +1140,5 @@ $('#show-territories').addEventListener('change',()=>{
 });
 
 camera = defaultCamera(); render(); scheduleSave({record:false});
+
+installSessionReview({button:document.querySelector('#review-session-text'),getAtlas:()=>atlas,getPlaceId:()=>selectedPlaceId,apply:next=>{atlas=next;render();scheduleSave({manual:false,label:'Apply session suggestions'});toast('Selected session changes applied');}});

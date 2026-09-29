@@ -1,6 +1,6 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 // A single world coastline with soft terrain fields shared by neighboring realms.
-import { terrainContours } from './landmass.js?v=biome-circles-1';
+import { terrainContours } from './landmass.js?v=layered-forest-1';
 import { independentShape, continentSvg } from './continent.js';
 const COAST_SAMPLES = 256;
 export const ISLAND_WATER_GAP = 18;

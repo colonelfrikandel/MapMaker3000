@@ -24,6 +24,8 @@ export function installBiomeEditor({getWorld,getCamera,toWorld,commit,pan,onActi
       palette.append(tile);
     }
     panel.querySelector('strong').after(palette);
+    const angle=document.createElement('label');angle.textContent='Tree edge angle (degrees)';const input=document.createElement('input');input.type='number';input.min='0';input.max='89';input.step='5';input.value=String(getWorld()?.forestStyle?.maxAngle??60);input.dataset.control='tree-angle';angle.append(input);palette.after(angle);
+    input.addEventListener('change',()=>{const value=Number(input.value);if(!Number.isFinite(value)||value<0||value>89){status('Choose an angle from 0 to 89 degrees.');return;}commit(world=>{world.forestStyle={...world.forestStyle,maxAngle:value};},'Change forest edge angle');status('Tree edge angle updated.');});
   }
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('biome-editor-overlay');svg.hidden=true;
   svg.setAttribute('aria-label',political?'Political territory editor':'Biome polygon editor');svg.setAttribute('tabindex','0');
@@ -33,6 +35,7 @@ export function installBiomeEditor({getWorld,getCamera,toWorld,commit,pan,onActi
   const selectedRegion=()=>collection()[selected];
   function status(message) {control('status').textContent=message;}
   function sync() {
+    if(!political)control('tree-angle').value=String(getWorld()?.forestStyle?.maxAngle??60);
     if(political){const previous=control('type').value;control('type').replaceChildren();for(const realm of getRealms())control('type').add(new Option(realm.name,realm.id));if(previous)control('type').value=previous;}
     const id=selected,select=control('region');select.replaceChildren(new Option('Select on map',''));
     for(const r of Object.values(collection()).sort((a,b)=>(b.priority??0)-(a.priority??0)||a.id.localeCompare(b.id))) select.add(new Option(`${political?(getRealms().find(p=>p.id===r.realmId)?.name||'Realm'):r.type} · priority ${r.priority??0} · ${r.id}`,r.id));

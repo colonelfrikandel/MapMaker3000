@@ -1,8 +1,9 @@
+import { samplePlaceEnvironment } from './environment.js';
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 // Deterministic, code-native map artwork. All SVG strings contain generated numbers only.
 import { cardSize } from './geometry.js';
 import { townBaseSvg } from './town-base.js';
-import { worldSvg } from './world-generator.js?v=biome-circles-1';
+import { worldSvg } from './world-generator.js?v=layered-forest-1';
 
 export function worldRealms(board,atlas) {
   return board.placeIds.map(id=>atlas.places[id]).filter(item=>item?.type==='continent').map(item=>{
@@ -163,7 +164,7 @@ export function artworkForBoard(board, atlas) {
     return worldSvg(worldRealms(board,atlas), board.worldSeed || board.name, atlas.worlds?.[board.id]);
   }
   if (!['town', 'village', 'house'].includes(board.kind)) return '';
-  if (board.baseMap && (board.kind === 'town' || board.kind === 'village')) return townBaseSvg(board.baseMap);
+  if (board.baseMap && (board.kind === 'town' || board.kind === 'village')) return townBaseSvg(board.baseMap, samplePlaceEnvironment(atlas,board.parentPlaceId));
   const rand = random(hash(`${board.kind}:${board.name}`));
   if (board.kind === 'house') {
     let floor = `<rect x="76" y="51" width="858" height="526" fill="#c6b18d" stroke="#5c4b37" stroke-width="15"/>`;

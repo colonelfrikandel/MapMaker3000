@@ -1,8 +1,9 @@
+import { forestSvg } from './forest-renderer.js';
 import { seedStream } from './seeds.js';
 import { contourField } from './landmass.js';
 import { prepareBiomes, displayedBiomes, simplifyLine, simplifyRing } from './smooth-regions.js';
 
-export const BIOME_COLORS={forest:'#809063',grassland:'#b4b481',desert:'#cfb77f',snow:'#e2dfce',tundra:'#a9b09c',wetland:'#899e78',alpine:'#b2b2a0'};
+export const BIOME_COLORS={forest:'#555a48',grassland:'#b4b481',desert:'#cfb77f',snow:'#e2dfce',tundra:'#a9b09c',wetland:'#899e78',alpine:'#b2b2a0'};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const round=v=>Math.round(v*100)/100 || 0;
 export function containsPolygon(points,x,y) {
@@ -125,8 +126,9 @@ export function naturalSvg(world) {
   const step=world.fields?.step||10,biomes=Object.values(displayedBiomes(world)).sort((a,b)=>a.priority-b.priority||a.id.localeCompare(b.id));
   let hash=2166136261;for(const c of JSON.stringify([world.seed,world.fields?.seed,biomes]))hash=Math.imul(hash^c.charCodeAt(0),16777619);
   const filter=`biome-blend-${(hash>>>0).toString(36)}`;
-  const fills=biomes.map(item=>`<path d="${polygon(item)}" fill="${BIOME_COLORS[item.type]||BIOME_COLORS.grassland}" fill-rule="evenodd"/>`).join('');
+  const fills=biomes.filter(item=>item.type!=='forest').map(item=>`<path d="${polygon(item)}" fill="${BIOME_COLORS[item.type]||BIOME_COLORS.grassland}" fill-rule="evenodd"/>`).join('');
   let svg=`<defs><filter id="${filter}" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="${round(step*.65)}"/></filter></defs>${fills}<g filter="url(#${filter})">${fills}</g>`;
+  svg+=forestSvg(biomes.filter(item=>item.type==='forest'),{maxAngle:world.forestStyle?.maxAngle??60},world.seed);
   const f=world.fields;
   if(f) {
     const random=seedStream(f.seed,'map-symbols');
@@ -138,7 +140,6 @@ export function naturalSvg(world) {
       if(Object.values(world.geography).some(g=>g.type==='lake'&&containsPolygon(g.points,x,y)))continue;
       const biome=[...biomes].reverse().find(b=>containsPolygon(b.points,x,y)&&!(b.holes||[]).some(h=>containsPolygon(h,x,y)))?.type;
       if(f.elevation[cell]>1200&&i%2===0) {const m=s*2;svg+=`<path d="M${round(x-m)} ${round(y+m*.4)}L${x} ${round(y-m)}L${round(x+m)} ${round(y+m*.4)}L${round(x+m*.15)} ${round(y+m*.05)}L${round(x-m*.1)} ${round(y-m*.5)}L${round(x-m*.3)} ${round(y+m*.3)}Z" fill="#d6d4b8" stroke="#666d57" stroke-width="${round(step*.085)}" stroke-linejoin="round"/>`;}
-      else if(biome==='forest')svg+=`<path d="M${round(x-s*.4)} ${y}Q${round(x-s*.55)} ${round(y-s*.8)} ${x} ${round(y-s*.8)}Q${round(x+s*.55)} ${round(y-s*.8)} ${round(x+s*.4)} ${y}Z M${x} ${y}v${round(s*.5)}" fill="#657a50" stroke="#506342" stroke-width="${round(step*.045)}" opacity=".65"/>`;
       else if(biome==='wetland')svg+=`<path d="M${round(x-s*.5)} ${y}h${round(s)}M${x} ${y}v${round(-s*.5)}m0 ${round(s*.35)}l${round(s*.2)} ${round(-s*.4)}" stroke="#5c785d" fill="none" stroke-width="${round(step*.06)}" opacity=".65"/>`;
     }
   }

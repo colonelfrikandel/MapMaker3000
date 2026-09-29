@@ -1,3 +1,4 @@
+import { vegetationSvg, styleSettlementSvg } from './settlement-style.js';
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 // Shared town geometry, rendering and compatibility with older imported maps.
 const WIDTH = 1010, HEIGHT = 630;
@@ -77,7 +78,7 @@ export function validateTownBase(base) {
   return base;
 }
 
-export function townBaseSvg(base) {
+export function townBaseSvg(base, environment = null) {
   validateTownBase(base);
   const l = base.layers;
   const fill = (id, color, opacity = 1) => `<path d="${l[id].map(polygonPath).join('')}" fill="${color}" opacity="${opacity}"/>`;
@@ -96,24 +97,31 @@ export function townBaseSvg(base) {
   }
   for (const [index, district] of l.districts.entries()) svg += `<path d="${polygonPath(district.polygon)}" fill="${districtColors[index % districtColors.length]}" fill-opacity=".86" stroke="#8d896e" stroke-width=".8"/>`;
   svg += fill('greens', '#a5ba81') + fill('squares', '#eee5c6');
+  svg += '<!--settlement-ground-end-->';
   svg += l.rivers.map(line => `<path d="${linePath(line.points)}" fill="none" stroke="#456d73" stroke-width="${line.width+2}" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
   svg += stroke('rivers', '#65a9ba', null);
   svg += stroke('roads', '#665b50', null) + l.roads.map(line => `<path d="${linePath(line.points)}" fill="none" stroke="#d9d1ba" stroke-width="${Math.max(1,line.width-2)}" stroke-linecap="round"/>`).join('');
   svg += fill('buildings', '#b17858') + `<path d="${l.buildings.map(polygonPath).join('')}" fill="none" stroke="#5b5146" stroke-width=".8"/>`;
   for (const [index,roof] of l.buildings.entries()) {
     if (roof.length!==4) continue;
+    if (environment?.surface==='land'&&environment.biome==='desert') {
+      const center=roof.reduce((sum,p)=>[sum[0]+p[0]/4,sum[1]+p[1]/4],[0,0]);
+      const inner=roof.map(p=>p.map((v,j)=>round(center[j]+(v-center[j])*.45)));
+      svg+=`<path d="${polygonPath(inner)}" fill="#b49a73" stroke="#f0dfb6" stroke-width=".8"/>`;
+      continue;
+    }
     const a=roof[0].map((v,j)=>round((v+roof[3][j])/2)),b=roof[1].map((v,j)=>round((v+roof[2][j])/2));
     svg+=`<path d="${polygonPath([roof[0],roof[1],b,a])}" fill="${['#d2ac7d','#c89870','#a9a088'][index%3]}"/><path d="M${a.join(' ')}L${b.join(' ')}" stroke="#654f3c" stroke-width=".8"/>`;
   }
   svg += fill('prisms', '#655f5a') + stroke('planks', '#675f52', null);
   svg += `<path d="${l.walls.map(polygonPath).join('')}" fill="none" stroke="#4e4c49" stroke-width="4" stroke-linejoin="round"/>`;
-  svg += l.trees.map(([x,y]) => `<circle cx="${x}" cy="${y}" r="3.2" fill="#7e9b70" stroke="#607b5d" stroke-width=".8"/>`).join('');
+  svg += vegetationSvg(l.trees, environment);
   for (const district of l.districts) {
     const poly = district.polygon;
     const x = round(poly.reduce((sum,p)=>sum+p[0],0)/poly.length), y = round(poly.reduce((sum,p)=>sum+p[1],0)/poly.length);
     svg += `<text x="${x}" y="${y}" text-anchor="middle" class="district-label">${escapeXml(district.name)}</text>`;
   }
-  return `<svg viewBox="0 0 1010 630" aria-hidden="true">${svg}</svg>`;
+  return `<svg viewBox="0 0 1010 630" aria-hidden="true">${styleSettlementSvg(svg,environment)}</svg>`;
 }
 
 export function nearestTownFootprint(base, point, maxDistance = 20) {
