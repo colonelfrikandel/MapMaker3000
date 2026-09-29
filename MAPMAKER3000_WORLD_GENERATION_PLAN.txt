@@ -1,0 +1,575 @@
+MAPMAKER3000 WORLD GENERATION PLAN
+=================================
+
+Purpose
+-------
+Evolve MapMaker3000 from a collection of connected realm maps into a coherent
+world editor. The world should be generated as a large landmass first, with
+editable ecology, political borders, and settlements that visually belong to
+their environment.
+
+The design should remain deterministic: the same seed, settings, and manual
+edits should reproduce the same result. Generated content must remain editable
+and manual changes must be preserved when regeneration is used.
+
+
+1. Generate a large landmass first
+----------------------------------
+
+The first generation step should create a fictional continent or large
+landmass rather than starting with separate realms.
+
+Possible outline presets include:
+
+- Broad southern landmass with a narrowing peninsula, inspired by the general
+  silhouette of Africa without copying a real map.
+- Fragmented landmass with bays and peninsulas, inspired by the general feel of
+  Europe without copying a real map.
+- Island-heavy continent.
+- Long north-south continent.
+- Custom outline or user-drawn starting shape.
+
+The generated landmass should contain:
+
+- Coastline and sea
+- Inland lakes
+- Elevation
+- Mountain ranges
+- Rivers
+- Climate fields
+- Initial biome regions
+
+The landmass should be fictional, seed-based, and editable rather than being
+an exact reproduction of Earth.
+
+
+2. Keep terrain and political borders separate
+-----------------------------------------------
+
+Political borders should be a separate layer from natural terrain.
+
+A border may cross a forest, mountain range, desert, or river without changing
+the underlying ecosystem. This lets multiple countries or realms share the
+same natural region.
+
+The map should therefore have separate concepts for:
+
+- Natural landmass
+- Biomes and ecological regions
+- Political borders
+- Settlements
+- Roads and other connections
+
+Changing a border must not automatically regenerate or destroy the terrain.
+
+
+3. Generate natural geography
+------------------------------
+
+After the landmass outline is created, generate large-scale geography:
+
+- Mountain chains following broad elevation patterns
+- Individual mountain regions and peaks
+- Rivers flowing from high areas toward lakes or the sea
+- Wetlands around low rivers and lakes
+- Forest areas
+- Grasslands and plains
+- Deserts and dry regions
+- Snow and tundra in cold or high areas
+
+The exact biome should be influenced by several continuous fields rather than
+only by a realm setting:
+
+    biome = latitude + temperature + rainfall + elevation + river proximity
+
+This should create gradual transitions such as:
+
+- Forest fading into grassland
+- Desert becoming scrubland near rivers
+- Snowy mountains becoming alpine forest
+- Wetlands forming around rivers and lakes
+- Tundra appearing in cold northern or high-elevation areas
+
+The generator should create an initial result, but the user must be able to
+override it manually.
+
+
+4. Add a Pen-tool editor for biomes
+-----------------------------------
+
+Biome regions should be editable vector polygons, similar to the Pen tool in
+Adobe Illustrator.
+
+Recommended workflow:
+
+1. Select "Add biome region".
+2. Choose the biome type: forest, desert, snow, grassland, swamp, tundra, etc.
+3. Click points around the desired region.
+4. Click the first point to close the polygon.
+5. Drag points to reshape the region.
+6. Move the whole region when necessary.
+7. Add points to a segment for more control.
+8. Delete points that are not needed.
+9. Change the biome type or its priority in the inspector.
+
+The editor should support:
+
+- Point handles
+- Segment selection
+- Moving an entire polygon
+- Adding and deleting polygon points
+- Duplicating a region
+- Changing biome type
+- Undo and redo
+- Showing selected regions above the normal map
+
+The first version can use straight polygon segments. Bezier handles can be
+added later if smooth coast-like biome borders are needed.
+
+Vector polygons are preferred over brush painting because they remain clean,
+scalable, selectable, and editable at every zoom level.
+
+Example biome data:
+
+    {
+      "id": "biome-forest-01",
+      "type": "forest",
+      "points": [[120, 80], [260, 110], [310, 240]],
+      "source": "generated",
+      "priority": 3
+    }
+
+Generated regions should be marked as generated. A region changed by the user
+should be marked as manually edited and protected from unwanted regeneration.
+
+When biome polygons overlap, the highest-priority region should win. The UI
+should make that priority visible and editable.
+
+
+5. Use biomes as visual and gameplay context
+---------------------------------------------
+
+Biome polygons should drive more than color. They should influence:
+
+- Terrain colors
+- Trees and vegetation
+- Snow coverage
+- Desert decoration
+- Mountain and rock styling
+- River surroundings
+- Available resources
+- Settlement generation
+- Settlement architecture
+- Roads and paths
+
+Biome boundaries should not look like hard cut-outs everywhere. Rendering can
+blend colors and decorative density near boundaries while preserving the
+editable polygon underneath.
+
+
+6. Generate settlements from their environment
+-----------------------------------------------
+
+When a city or village is placed, calculate an environmental context at its
+location.
+
+Example context:
+
+    {
+      "biome": "temperate-forest",
+      "elevation": 240,
+      "slope": "gentle",
+      "nearbyWater": true,
+      "nearbyRoad": true,
+      "climate": "cool-wet",
+      "resources": ["timber", "freshwater"]
+    }
+
+The settlement generator should use this context to choose its layout,
+building style, vegetation, and surrounding scenery.
+
+Forest settlement:
+
+- Buildings in clearings rather than empty grass
+- Timber buildings
+- Woodland paths
+- Logging roads or sawmills where appropriate
+- Trees continuing between outer houses
+
+Desert settlement:
+
+- Compact buildings
+- Shaded streets
+- Courtyards
+- Wells and cisterns
+- Sparse vegetation
+- Roads following dry riverbeds or usable passes
+
+Snowy settlement:
+
+- Steep roofs
+- Packed snow near buildings
+- Conifer trees
+- Frozen or partially frozen streams
+- Clustered buildings for warmth
+
+The city should not replace the biome with a blank town map. It should use a
+settlement-clearance mask: dense construction changes the terrain locally,
+while the settlement edge gradually blends back into the surrounding biome.
+
+
+7. Preserve generated and manual content
+-----------------------------------------
+
+Every generated object should have an edit state such as:
+
+- generated
+- protected
+- manually-moved
+- manually-edited
+
+Regeneration may change ordinary generated objects, but it must respect
+protected and manually edited content.
+
+Named settlements, buildings, rooms, notes, events, and connections should
+retain their identity when the surrounding environment is regenerated.
+
+
+8. Postpone house movement until later
+---------------------------------------
+
+The individual house-moving tool should not be part of the first milestone.
+
+It should be added only after landmass generation, biome editing, and
+context-aware settlements are stable.
+
+When eventually implemented, it should support two modes:
+
+- Move one house while leaving nearby roads and buildings intact.
+- Reflow the settlement so roads, plots, and nearby houses adjust around it.
+
+The house identity, rooms, notes, events, and history must remain attached to
+the house after it moves.
+
+
+9. Use transcripts as reviewed suggestions
+-------------------------------------------
+
+Session transcripts should not directly rewrite the map. First extract facts
+and suggestions, then ask the user to approve them.
+
+Example transcript:
+
+    "The village lies in a cold pine forest beside a fast river. There is an
+    old stone bridge and the northern houses are abandoned."
+
+Possible suggestions:
+
+- Set the surrounding biome to cold pine forest.
+- Add or adjust a river.
+- Add a stone bridge.
+- Place or rename a village.
+- Mark northern houses as abandoned.
+- Add the description to the session history.
+
+The user should be able to accept individual suggestions or apply them as a
+batch. The system must show what will change before applying it.
+
+Accepted changes should retain provenance:
+
+    {
+      "kind": "session-suggestion",
+      "sessionId": "session-123",
+      "sourceText": "The village lies in a cold pine forest...",
+      "acceptedAt": "2026-09-29T12:00:00Z"
+    }
+
+This prevents a misunderstood transcript from silently damaging the atlas.
+
+
+10. Recommended implementation order
+--------------------------------------
+
+Phase 1: Large landmass
+
+- Add continent-scale outline generation.
+- Keep the existing deterministic seed workflow.
+- Preserve existing realm positions and saved atlases where possible.
+
+Phase 2: Natural geography
+
+- Add elevation and mountain chains.
+- Add river and lake generation.
+- Add climate and rainfall fields.
+- Generate initial biome polygons.
+
+Phase 3: Biome Pen tool
+
+- Store biome regions as editable polygons.
+- Add polygon creation, selection, point dragging, point insertion, and point
+  deletion.
+- Add biome type and priority controls.
+- Preserve manually edited regions during regeneration.
+
+Phase 4: Context-aware settlements
+
+- Sample biome, elevation, water, climate, and resources at settlement sites.
+- Adapt settlement layouts, architecture, vegetation, and edge blending.
+- Keep named and manually edited content stable.
+
+Phase 5: Transcript suggestions
+
+- Store sessions and source text.
+- Extract structured suggestions and keywords.
+- Preview proposed map changes.
+- Require user approval.
+- Store provenance for accepted changes.
+
+Phase 6: House movement and settlement reflow
+
+- Add individual house movement.
+- Add optional road and plot reflow.
+- Preserve house identity and campaign history.
+
+
+11. Existing MapMaker3000 foundations
+-------------------------------------
+
+The current project already contains useful foundations for this plan:
+
+- Connected mainland and island terrain generation
+- Deterministic world and settlement generation
+- Realm biome settings
+- Generated town and village geography
+- Preservation of named places during regeneration
+- Movable or protected village places
+- Provenance fields
+- A sessions collection reserved for future transcript-related features
+
+The plan should extend these systems rather than discard them.
+
+
+Core design principle
+--------------------
+
+Generate terrain first, political borders second, settlements third, and
+transcript suggestions last.
+
+The user should always be able to reshape the world by hand, especially its
+biomes, while preserving the connection between geography, ecology, and the
+settlements built inside them.
+
+
+12. Generate villages from narrative layout briefs
+---------------------------------------------------
+
+Village generation should treat a description as a structured layout brief,
+not only as flavor text. The generator should extract:
+
+- Arrival direction and movement
+- Major zones
+- Important landmarks
+- Buildings and their relationships
+- Atmosphere and visual details
+
+Example village description:
+
+    The party enters the village from the west by carriage. On the north side
+    is a market with stalls and shops. In the middle is a large statue of a
+    random god. On the east side is an abandoned mansion with withered trees.
+    The inn is on the west side, close to where the party entered.
+
+This should become a layout brief such as:
+
+    Village: Brackenford
+
+    Arrival:
+    - Party enters from the west by carriage.
+    - Main road continues toward the village center.
+    - Road is wide enough for carts.
+
+    Zones:
+    - North: market district.
+    - West: inn and arrival-side buildings.
+    - East: abandoned mansion and dead gardens.
+    - Center: public square.
+
+    Landmarks:
+    - Large statue of a randomly selected god in the central square.
+    - Market stalls and permanent shops north of the square.
+    - Abandoned mansion visible from the eastern road.
+
+    Atmosphere:
+    - Normal activity near the entrance and market.
+    - Quiet, neglected atmosphere near the mansion.
+    - Withered trees and overgrown gardens around the mansion.
+
+The resulting spatial arrangement might be:
+
+                            NORTH
+                Market stalls / shops / market
+
+                                  |
+                                  |
+    WEST ENTRY ---- Inn ---- Central square ---- Eastern road
+      carriage road             God statue       Abandoned mansion
+                                                     withered trees
+
+The exact coordinates should vary with the seed, but the relationships should
+remain recognizable.
+
+
+13. Use soft spatial constraints
+---------------------------------
+
+The generator should use preferred regions and relationships instead of
+forcing every object to an exact coordinate.
+
+For example, the inn could be represented as:
+
+    {
+      "type": "inn",
+      "preferredRegion": "west",
+      "near": ["westEntrance", "mainRoad"],
+      "distanceFrom": {
+        "market": "medium",
+        "mansion": "far"
+      },
+      "importance": "required"
+    }
+
+The mansion could be represented as:
+
+    {
+      "type": "mansion",
+      "preferredRegion": "east",
+      "near": ["villageEdge"],
+      "isolated": true,
+      "condition": "abandoned",
+      "scenery": ["withered-trees", "overgrown-garden"],
+      "importance": "required"
+    }
+
+Useful relationships include:
+
+- north, south, east, west
+- near the entrance
+- near the main road
+- in the center
+- beside the market
+- isolated from the other houses
+- visible from a road or square
+- uphill or downhill
+- near water
+- outside the village edge
+
+This allows different generated villages to feel original while still
+preserving the meaning of the description.
+
+
+14. Generate a village in stages
+----------------------------------
+
+The recommended generation sequence is:
+
+1. Determine the entrance direction from the parent road or description.
+2. Place the central square or main crossroads.
+3. Place required landmarks relative to the center.
+4. Create roads connecting the entrance, square, market, inn, and mansion.
+5. Generate building plots around those roads.
+6. Apply the surrounding biome style.
+7. Add atmosphere and secondary details.
+8. Show a preview for approval and manual adjustment.
+
+For the example above, this means:
+
+- Create a west carriage entrance.
+- Route a main road from the entrance toward the center.
+- Place the inn close to the western entrance.
+- Place a central square and statue.
+- Place the market north of the square.
+- Place the mansion toward the eastern edge with more space around it.
+- Add withered trees, dead gardens, and lower building density near the mansion.
+
+The generator should choose the actual road curves, plot sizes, and building
+shapes using the seed, while keeping these relationships intact.
+
+
+15. Separate required, preferred, and decorative information
+--------------------------------------------------------------
+
+Every extracted detail should receive an importance level.
+
+Required:
+
+- The inn is on the west side.
+- The market is on the north side.
+- The statue is in the center.
+- The mansion is on the east side and abandoned.
+
+Preferred:
+
+- The inn is close to the entrance.
+- The mansion is isolated.
+- The mansion is visible from the eastern road.
+- The market connects naturally to the central square.
+
+Decorative:
+
+- Muddy roads
+- Barking dogs
+- Broken shutters
+- Market noise
+- Smoke from chimneys
+- Weeds, dead leaves, or damaged fences
+
+Required constraints should be preserved during regeneration. Preferred
+constraints should be satisfied when possible. Decorative details can change
+between seeds without invalidating the village.
+
+
+16. Combine narrative, environment, and deterministic generation
+------------------------------------------------------------------
+
+The final village should be generated from three inputs:
+
+    narrative brief
+    + biome and terrain context
+    + deterministic seed
+    = village layout and atmosphere
+
+For example, the same west-side abandoned mansion may look different in each
+environment:
+
+- In a forest: overgrown garden, moss, fallen branches, and trees reclaiming
+  the walls.
+- In a desert: cracked courtyard, dead palms, windblown sand, and collapsed
+  shade structures.
+- In a snowy biome: buried paths, frozen gardens, damaged steep roofs, and
+  leafless conifers.
+
+The narrative determines what the location means. The biome determines how it
+looks. The seed determines the exact arrangement.
+
+
+17. Use AI to interpret descriptions, not to draw the final map
+----------------------------------------------------------------
+
+An AI or transcript parser should convert prose into structured constraints and
+keywords. The deterministic village generator should create the actual roads,
+plots, buildings, and scenery.
+
+Example extracted tags:
+
+    entrance: west
+    arrival: carriage
+    market: north
+    landmark: central-statue
+    statue.subject: random-god
+    inn: west-near-entrance
+    mansion: east-abandoned-isolated
+    mansion.scenery: withered-trees
+
+Before applying the result, the interface should show the interpreted brief and
+allow the user to edit or approve it. This avoids an incorrect interpretation
+silently changing the village.
