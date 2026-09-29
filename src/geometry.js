@@ -18,6 +18,7 @@ export function buildLayout(atlas) {
   const byDepth = Array.from({ length: MAX_DEPTH + 1 }, () => []);
   const cells = Array.from({ length: MAX_DEPTH + 1 }, () => new Map());
   const routeCells = Array.from({ length: MAX_DEPTH + 1 }, () => new Map());
+  const longRoutes = Array.from({ length: MAX_DEPTH + 1 }, () => new Set());
   const seen = new Set();
   function visit(boardId, x, y, scale, depth) {
     if (seen.has(boardId) || depth > MAX_DEPTH) return;
@@ -55,6 +56,8 @@ export function buildLayout(atlas) {
     const rect = { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1), x1, y1, x2, y2, depth: from.depth };
     routes.set(route.id, rect);
     const cellSize = GRID_SIZE / ZOOM_STEP ** rect.depth;
+    const cellCount=(Math.ceil(rect.width/cellSize)+1)*(Math.ceil(rect.height/cellSize)+1);
+    if (cellCount>2048) { longRoutes[rect.depth].add(route.id); continue; }
     for (let gx = Math.floor(rect.x / cellSize); gx <= Math.floor((rect.x + rect.width) / cellSize); gx++) {
       for (let gy = Math.floor(rect.y / cellSize); gy <= Math.floor((rect.y + rect.height) / cellSize); gy++) {
         const key = `${gx},${gy}`;
@@ -63,11 +66,14 @@ export function buildLayout(atlas) {
       }
     }
   }
-  return { boards, places, routes, byDepth, cells, routeCells };
+  return { boards, places, routes, byDepth, cells, routeCells, longRoutes };
 }
 
 export function nearbyPlaces(layout, depth, view, margin = 0) {
   const cellSize = GRID_SIZE / ZOOM_STEP ** depth;
+  if ((view.right-view.left+margin*2)/cellSize*(view.bottom-view.top+margin*2)/cellSize>Math.max(1024,layout.byDepth[depth].length*4)) {
+    return layout.byDepth[depth].filter(id=>intersects(layout.places.get(id),view,margin));
+  }
   const ids = new Set();
   for (let gx = Math.floor((view.left - margin) / cellSize); gx <= Math.floor((view.right + margin) / cellSize); gx++) {
     for (let gy = Math.floor((view.top - margin) / cellSize); gy <= Math.floor((view.bottom + margin) / cellSize); gy++) {
@@ -79,7 +85,10 @@ export function nearbyPlaces(layout, depth, view, margin = 0) {
 
 export function nearbyRoutes(layout, depth, view, margin = 0) {
   const cellSize = GRID_SIZE / ZOOM_STEP ** depth;
-  const ids = new Set();
+  if ((view.right-view.left+margin*2)/cellSize*(view.bottom-view.top+margin*2)/cellSize>Math.max(1024,layout.routes.size*4)) {
+    return [...layout.routes].filter(([,rect])=>rect.depth===depth && intersects(rect,view,margin)).map(([id])=>id);
+  }
+  const ids = new Set(layout.longRoutes?.[depth] || []);
   for (let gx = Math.floor((view.left - margin) / cellSize); gx <= Math.floor((view.right + margin) / cellSize); gx++) {
     for (let gy = Math.floor((view.top - margin) / cellSize); gy <= Math.floor((view.bottom + margin) / cellSize); gy++) {
       for (const id of layout.routeCells[depth].get(`${gx},${gy}`) || []) ids.add(id);

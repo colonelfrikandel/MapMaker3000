@@ -16,6 +16,8 @@ Then open `http://127.0.0.1:8765/` in a browser on **the same computer**. `local
 
 - Pan and zoom smoothly through world, continent, province, settlement, and interior detail. The same detail level is available everywhere, so panning sideways reveals neighboring places and their details.
 - The world map forms one continuous mainland from neighboring realms. Select a realm to choose its landscape, or mark it as a separate island. Coastlines stay closed and terrain colors and symbols blend between neighboring realms. **Generate world** previews another seeded coastline without moving or renaming realms.
+- World coastlines come from a connected terrain field with variation at several scales, producing irregular peninsulas, gulfs, coastal detail, and inland water. An island placed inside the mainland sits in a lake with a water border following its coastline. At the coast, that water joins the sea. Two islands still cannot overlap or touch; conflicting changes show a message instead of moving your realms. Renaming a realm preserves its geography. Older saved atlases still load, including inland islands.
+- The world expands with your realms in every direction, including negative coordinates. Zoom out and place or drag realms beyond the old map area; **Reset view** fits the expanded landmass. There is no fixed coastline boundary or edge squeeze. Town and interior maps retain their existing local dimensions.
 - Places outside the view are removed from the page and rendered again when you approach them. Scroll out to reverse through the same continuous ranges without a page load.
 - The map uses deterministic vector artwork instead of location cards: coastlines and terrain, plus generated town districts, streets, walls, squares, fields, trees, and building shapes. Map layers are rendered only when in view.
 - Drag existing places and drag new places from the palette. Double-click a place or use the atlas tree to fly to it.
@@ -30,11 +32,9 @@ The data format uses stable IDs for places, boards, and connections. Places and 
 
 The starting atlas uses State Of Kemeia, Idrieland, Emerald Bay, and Island Of Crieta as test realms. The first three share a mainland; Crieta is a separate island. The supplied JSON files are reference material for later generation work; the site generates its world geometry itself. Existing atlases are preserved; use **New atlas** if you want to replace one with the new example.
 
-The starting atlas uses State Of Kemeia, Idrieland, Emerald Bay, and Island Of Crieta as test realms. The first three share a mainland; Crieta is a separate island. The supplied JSON files are reference material for later generation work; the site generates its world geometry itself. Existing atlases are preserved; use **New atlas** if you want to replace one with the new example.
-
 Open the [four-realm example](https://colonelfrikandel.github.io/MapMaker3000/?example=four-realms) to try it with separate browser storage, leaving your normal atlas untouched.
 
-To try another town layout, open a town or village and click **Generate town**. Choose a seed and size, inspect the preview, then choose **Use this town map**. The same seed and size reproduce the same geometry. House selection and interiors are planned for a later step.
+To try another settlement layout, open a town or village and click **Regenerate surroundings**. Choose a seed and size, inspect the preview, then choose **Use these surroundings**. The same seed, size, and preserved places and geography reproduce the same geometry. Double-click a building to name it and explore its interior.
 
 ## Try the campaign village
 
@@ -48,7 +48,7 @@ Town generation retains its older layout, and interiors use simple room diagrams
 
 ## Tests
 
-Run `npm test`. Tests cover deterministic generation, connected roads, plot spacing, river and coast clearance, all three village types, kept and movable places, conflict handling, nested layout, preservation during regeneration, and campaign data JSON round trips.
+Run `npm test`. Tests check JavaScript syntax for the browser entry point and runtime modules, and cover deterministic generation, connected roads, plot spacing, river and coast clearance, all three village types, kept and movable places, conflict handling, nested layout, preservation during regeneration, and campaign data JSON round trips.
 
 ## GitHub Pages
 
@@ -57,6 +57,10 @@ The app is published at [https://colonelfrikandel.github.io/MapMaker3000/](https
 Browser storage is local to one browser and device. Export your atlas regularly to keep a backup or move it to another device.
 
 ## Map coordinates
+
+World terrain uses at most 140,000 grid samples per generation and at most 1,600 decorative symbol attempts. Very large or widely spread worlds use coarser coastlines instead of allocating an ever-growing grid. The world SVG and its lake mask are displayed through a viewport-sized surface; panning and zooming reuse existing geometry. Wide views scan existing places rather than millions of empty spatial cells, and long routes bypass oversized cell indexes. This supports large coordinates, not an unlimited number of realms at unlimited detail. Continent shapes are procedural approximations rather than a simulation of plate tectonics or erosion.
+
+Run `npm run benchmark:world` for reproducible geometry/SVG timings with 4, 100, and 500 realms. The benchmark reports generation work and SVG size; it does not measure browser frame rate. Geography changes with this generator version, while saved realm positions, names, notes, and detail maps remain intact.
 
 Each board retains its existing local place coordinates. At render time, its geometry is projected inside its parent place into shared world coordinates. Zoom controls one camera across every board; adjacent places at the same depth therefore stay adjacent. The renderer mounts only nearby map features and terrain, and blends neighboring detail depths as the scale changes. The saved atlas schema remains version 1, including its future session provenance fields.
 

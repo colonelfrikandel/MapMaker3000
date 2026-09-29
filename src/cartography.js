@@ -2,7 +2,15 @@
 // Deterministic, code-native map artwork. All SVG strings contain generated numbers only.
 import { cardSize } from './geometry.js';
 import { townBaseSvg } from './town-base.js';
-import { worldSvg } from './world-generator.js';
+import { worldSvg } from './world-generator.js?v=gentle-inlets-5';
+
+export function worldRealms(board,atlas) {
+  return board.placeIds.map(id=>atlas.places[id]).filter(item=>item?.type==='continent').map(item=>{
+    const [w,h]=cardSize(item.type);
+    return { name:item.name, x:item.x+w/2, y:item.y+h/2, island:!!item.island,
+      biome:item.biome || 'mixed', radius:item.island ? 65 : 150 };
+  });
+}
 
 function hash(value) {
   let h = 2166136261;
@@ -152,11 +160,7 @@ export function artworkForBoard(board, atlas) {
     return `<svg viewBox="0 0 1010 630" aria-hidden="true">${art}</svg>`;
   }
   if (board.kind === 'world') {
-    const realms = board.placeIds.map(id => atlas.places[id]).filter(item => item?.type === 'continent').map(item => {
-      const [w,h] = cardSize(item.type);
-      return { name:item.name, x:item.x+w/2, y:item.y+h/2, island:!!item.island, biome:item.biome || 'mixed', radius:item.island ? 65 : 150 };
-    });
-    return worldSvg(realms, board.worldSeed || board.name);
+    return worldSvg(worldRealms(board,atlas), board.worldSeed || board.name);
   }
   if (!['town', 'village', 'house'].includes(board.kind)) return '';
   if (board.baseMap && (board.kind === 'town' || board.kind === 'village')) return townBaseSvg(board.baseMap);

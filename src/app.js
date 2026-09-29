@@ -1,13 +1,11 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 import { buildLayout, cardSize, levelAtScale, blend, nearbyPlaces, nearbyRoutes, ZOOM_STEP, MAX_DEPTH } from './geometry.js';
 import { planDetails } from './generator.js';
-import { artworkForPlace, artworkForBoard } from './cartography.js?v=world-base-1';
+import { artworkForPlace, artworkForBoard, worldRealms } from './cartography.js?v=gentle-inlets-5';
+import { worldIslandConflicts, worldLandShape } from './world-generator.js?v=gentle-inlets-5';
 import { validateTownBase, nearestTownFootprint } from './town-base.js';
 import { generateTownBase } from './town-generator.js';
-import { artworkForPlace, artworkForBoard } from './cartography.js?v=world-base-1';
 import { addVillageExample, addCampaignEvent, planSettlement, applySettlement, villageType } from './campaign.js';
-import { validateTownBase, nearestTownFootprint } from './town-base.js';
-import { generateTownBase } from './town-generator.js';
 
 const EXAMPLE_MODE = new URLSearchParams(location.search).get('example') === 'four-realms';
 const STORAGE_KEY = EXAMPLE_MODE ? 'mapmaker3000.atlas.example.four-realms.v1' : 'mapmaker3000.atlas.v1';
@@ -170,6 +168,9 @@ let eventDraftPlaceId = null;
 function board() { return atlas.boards[currentBoardId]; }
 function place(id) { return atlas.places[id]; }
 function route(id) { return atlas.routes[id]; }
+function worldConflict(target, seed=target.worldSeed || target.name) {
+  return target.kind === 'world' ? worldIslandConflicts(worldRealms(target,atlas),seed)[0] : null;
+}
 function scheduleSave() {
   els.saveStatus.textContent = 'Saving…';
   clearTimeout(saveTimer);
@@ -183,14 +184,16 @@ function toast(message) {
   toastTimer = setTimeout(() => els.toast.classList.remove('show'), 3100);
 }
 function defaultCamera() {
-  const scale = Math.max(0.45, Math.min(1, (els.wrap.clientWidth - 30) / 1010));
+  const root=atlas.boards[atlas.rootBoardId];
+  const bounds=worldLandShape(worldRealms(root,atlas),root.worldSeed || root.name).bounds;
+  const scale = Math.min(1,(els.wrap.clientWidth-30)/bounds.width,(els.wrap.clientHeight-30)/bounds.height);
   return {
-    x: Math.max(12, (els.wrap.clientWidth - 1010 * scale) / 2),
-    y: Math.max(20, (els.wrap.clientHeight - 630 * scale) / 2),
+    x:(els.wrap.clientWidth-bounds.width*scale)/2-bounds.x*scale,
+    y:(els.wrap.clientHeight-bounds.height*scale)/2-bounds.y*scale,
     scale,
   };
 }
-function baseScale() { return defaultCamera().scale; }
+function baseScale() { return Math.max(.45,Math.min(1,(els.wrap.clientWidth-30)/1010)); }
 function maxScale() { return baseScale() * ZOOM_STEP ** MAX_DEPTH; }
 function renderCamera() {
   const depth = levelAtScale(camera.scale, baseScale());
@@ -208,7 +211,7 @@ function screenToWorld(clientX, clientY) {
 function zoomAt(factor, clientX, clientY) {
   if (flyAnimation) { cancelAnimationFrame(flyAnimation); flyAnimation = null; }
   const old = screenToWorld(clientX, clientY);
-  camera.scale = Math.max(baseScale() * 0.65, Math.min(maxScale(), camera.scale * factor));
+  camera.scale = Math.max(Math.min(defaultCamera().scale*.4,baseScale()*.1), Math.min(maxScale(), camera.scale * factor));
   const rect = els.wrap.getBoundingClientRect();
   camera.x = clientX - rect.left - old.x * camera.scale;
   camera.y = clientY - rect.top - old.y * camera.scale;
@@ -217,7 +220,7 @@ function zoomAt(factor, clientX, clientY) {
 function centerOnBoard(boardId, animate = true) {
   const rect = layout.boards.get(boardId); if (!rect) return;
   const targetScale = Math.min(maxScale(), baseScale() * ZOOM_STEP ** rect.depth);
-  const destination = {
+  const destination = boardId===atlas.rootBoardId ? defaultCamera() : {
     scale: targetScale,
     x: els.wrap.clientWidth / 2 - (rect.x + rect.width / 2) * targetScale,
     y: els.wrap.clientHeight / 2 - (rect.y + rect.height / 2) * targetScale,
@@ -371,7 +374,7 @@ function paintVisible() {
   const wantedRoutes = new Set();
   const wantedBoards = new Set();
   const rootRect = layout.boards.get(atlas.rootBoardId);
-  if (rootRect && !(rootRect.x > view.right || rootRect.y > view.bottom || rootRect.x + rootRect.width < view.left || rootRect.y + rootRect.height < view.top)) {
+  if (rootRect) {
     wantedBoards.add(atlas.rootBoardId);
     let terrain = visibleBoards.get(atlas.rootBoardId);
     if (!terrain) {
@@ -379,9 +382,14 @@ function paintVisible() {
       terrain.innerHTML = artworkForBoard(atlas.boards[atlas.rootBoardId], atlas);
       visibleBoards.set(atlas.rootBoardId, terrain); els.terrainLayer.append(terrain);
     }
-    terrain.style.left = `${camera.x + rootRect.x * camera.scale}px`;
-    terrain.style.top = `${camera.y + rootRect.y * camera.scale}px`;
-    terrain.style.transform = `scale(${camera.scale})`;
+    // Keep the browser's drawing surface the size of the viewport. Panning
+    // changes only the viewBox; geometry is regenerated only after edits.
+    terrain.style.left = '0px'; terrain.style.top = '0px';
+    terrain.style.width = `${els.wrap.clientWidth}px`;terrain.style.height = `${els.wrap.clientHeight}px`;
+    terrain.style.transform = 'none';
+    terrain.firstElementChild.setAttribute('viewBox',`${view.left} ${view.top} ${view.right-view.left} ${view.bottom-view.top}`);
+    const waterMask=terrain.querySelector('mask');
+    if(waterMask) for(const [key,value] of Object.entries({x:view.left,y:view.top,width:view.right-view.left,height:view.bottom-view.top})) waterMask.setAttribute(key,value);
     terrain.style.opacity = 1;
   }
   for (const [depth, opacity] of depths) {
@@ -501,6 +509,8 @@ function renderHeader() {
   els.kind.textContent = `${TYPES[board().kind]?.label || 'Map'} map`.toUpperCase();
   els.wrap.dataset.mapKind = board().kind;
   els.subtitle.textContent = board().baseMap ? 'Double-click a building to name it. Pin events to places; regenerate the surroundings as your story grows.' : board().kind === 'house' ? 'Explore the rooms and pin your discoveries to where they happened.' : 'Scroll to reveal detail across the atlas. Drag to visit neighboring places.';
+  const conflict = worldConflict(board());
+  if (conflict) els.subtitle.textContent = `${conflict} Move an island to open water to separate it.`;
   els.generateButton.hidden = !['world','town','village','house'].includes(board().kind);
   els.generateButton.textContent = board().kind === 'world' ? '✦ Generate world' : board().kind === 'house' ? '✦ Add rooms' : '✦ Regenerate surroundings';
 }
@@ -525,6 +535,11 @@ function addPlace(type, x, y, boardId = currentBoardId, footprintIndex = null) {
   const item = makePlace(boardId, type, DEFAULT_NAMES[type] || 'New place', Math.round(x), Math.round(y));
   if (footprintIndex !== null) item.baseFootprintIndex = footprintIndex;
   atlas.places[item.id] = item; targetBoard.placeIds.push(item.id); placingType = null;
+  const conflict = worldConflict(targetBoard);
+  if (conflict) {
+    targetBoard.placeIds.pop(); delete atlas.places[item.id];
+    renderPalette(); toast(`${conflict} Choose another position.`); return;
+  }
   if (ENTERABLE.has(type)) { const child = makeBoard(item.name, type, item.id); atlas.boards[child.id] = child; item.childBoardId = child.id; }
   render(); selectPlace(item.id); scheduleSave(); toast(`${TYPES[type].label} added`);
   if (window.innerWidth > 1050) els.name.focus();
@@ -542,9 +557,10 @@ function updateGeneratorPreview() {
   const seed = els.generatorSeed.value.trim();
   const target = atlas.boards[generatorBoardId];
   if (target.kind === 'world') {
+    const conflict = seed && worldConflict(target, seed);
     els.generatorMapPreview.innerHTML = seed ? artworkForBoard({ ...target, worldSeed: seed }, atlas) : '';
-    els.generatorPreview.textContent = seed ? 'Changes the shared coastline and terrain details. Realm positions, landscapes, names and island choices stay in place.' : 'Enter a seed to preview the world.';
-    els.generatorApply.disabled = !seed;
+    els.generatorPreview.textContent = conflict ? `${conflict} Move the island farther away or try another seed.` : seed ? 'New bays, peninsulas and coastal details. Inland islands sit in lakes; coastal islands keep a water gap. Realm positions, landscapes and names stay in place.' : 'Enter a seed to preview the world.';
+    els.generatorApply.disabled = !seed || !!conflict;
     return;
   }
   if (target.kind === 'town' || target.kind === 'village') {
@@ -648,6 +664,9 @@ function enterPlace(target = null) {
 }
 function deletePlace() {
   const item = place(selectedPlaceId); if (!item) return;
+  const target = atlas.boards[item.boardId];
+  const conflict = worldConflict({...target,placeIds:target.placeIds.filter(pid=>pid!==item.id)});
+  if (conflict) { toast(`${conflict} Move the island before removing this realm.`); return; }
   const message = item.childBoardId ? `Delete ${item.name} and its detail map? This cannot be undone.` : `Delete ${item.name}?`;
   if (!confirm(message)) return;
   const removedIds = new Set();
@@ -740,6 +759,11 @@ els.wrap.addEventListener('pointermove', (event) => {
 function endGesture(event) {
   if (!gesture || gesture.pointerId !== event.pointerId) return;
   if (gesture.kind === 'place' && gesture.moved) {
+    const conflict = worldConflict(atlas.boards[gesture.item.boardId]);
+    if (conflict) {
+      gesture.item.x = gesture.x; gesture.item.y = gesture.y; layoutDirty = true;
+      toast(`${conflict} Move the island farther away.`);
+    }
     const baseMap = atlas.boards[gesture.item.boardId]?.baseMap;
     if (gesture.item.type === 'house' && baseMap) {
       const [width, height] = cardSize('house');
@@ -757,7 +781,7 @@ function endGesture(event) {
     }
     const terrain = visibleBoards.get(gesture.item.boardId);
     if (terrain) { terrain.remove(); visibleBoards.delete(gesture.item.boardId); }
-    renderCamera(); scheduleSave();
+    renderCamera(); renderHeader(); scheduleSave();
   }
   gesture.card?.classList.remove('dragging');
   if (gesture.moved) lastDragEnd = performance.now();
@@ -812,6 +836,11 @@ els.name.addEventListener('input', () => {
 els.type.addEventListener('change', () => {
   const item = place(selectedPlaceId); if (!item) return;
   const nextType = els.type.value;
+  const previousType = item.type;
+  item.type = nextType;
+  const conflict = worldConflict(atlas.boards[item.boardId]);
+  item.type = previousType;
+  if (conflict) { els.type.value = previousType; toast(conflict); return; }
   if (nextType === 'house' && atlas.boards[item.boardId]?.baseMap) {
     const footprint = nearestTownFootprint(atlas.boards[item.boardId].baseMap, {x:item.x+76,y:item.y+49});
     if (!footprint || atlas.boards[item.boardId].placeIds.some(pid => pid !== item.id && place(pid)?.baseFootprintIndex === footprint.index)) {
@@ -821,7 +850,7 @@ els.type.addEventListener('change', () => {
   } else delete item.baseFootprintIndex;
   item.type = nextType;
   if (item.childBoardId) atlas.boards[item.childBoardId].kind = item.type;
-  renderPlaces(); renderInspector(); scheduleSave();
+  renderPlaces(); renderInspector(); renderHeader(); scheduleSave();
 });
 $('#keep-place').addEventListener('change', () => {
   const item = place(selectedPlaceId); if (!item) return;
@@ -833,7 +862,14 @@ els.realmBiome.addEventListener('change', () => {
 });
 els.realmIsland.addEventListener('change', () => {
   const item = place(selectedPlaceId); if (!item || item.type !== 'continent') return;
-  item.island = els.realmIsland.checked; renderPlaces(); scheduleSave();
+  const previous = item.island;
+  item.island = els.realmIsland.checked;
+  const conflict = worldConflict(atlas.boards[item.boardId]);
+  if (conflict) {
+    item.island = previous; els.realmIsland.checked = !!previous;
+    toast(`${conflict} Move this realm away from the other island first.`); return;
+  }
+  renderPlaces(); renderHeader(); scheduleSave();
 });
 for (const [input, key] of [[els.description, 'description'], [els.notes, 'notes']]) {
   input.addEventListener('input', () => { const item = place(selectedPlaceId); if (item) { item[key] = input.value; scheduleSave(); } });
@@ -899,9 +935,11 @@ els.generatorApply.addEventListener('click', () => {
   const target = atlas.boards[generatorBoardId];
   if (target.kind === 'world') {
     if (!seed) return;
+    const conflict = worldConflict(target,seed);
+    if (conflict) { toast(conflict); return; }
     target.worldSeed = seed;
     els.generatorDialog.close(); generatorBoardId = null;
-    renderPlaces(); scheduleSave(); toast('World coastline regenerated');
+    renderPlaces(); renderHeader(); scheduleSave(); toast('World coastline regenerated');
     return;
   }
   if (target.kind === 'town' || target.kind === 'village') {
@@ -939,6 +977,7 @@ $('#new-atlas-button').addEventListener('click', () => {
 });
 $('#rename-board').addEventListener('click', () => {
   const name = prompt('Map name', board().name)?.trim(); if (!name) return;
+  if (board().kind === 'world') board().worldSeed ||= board().name;
   board().name = name; if (board().parentPlaceId) { const parent = place(board().parentPlaceId); if (parent) parent.name = name; }
   render(); scheduleSave();
 });

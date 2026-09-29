@@ -55,3 +55,18 @@ test('a route follows its places and is culled outside the viewport', () => {
   assert.equal(moved.routes.get('road').x1 - first.routes.get('road').x1, 80);
   assert.equal(moved.routes.get('road').x2, first.routes.get('road').x2);
 });
+
+test('very wide views and long routes do not allocate or scan the empty world grid', () => {
+  const atlas={rootBoardId:'world',boards:{world:{id:'world',placeIds:['a','b']}},places:{
+    a:{id:'a',boardId:'world',type:'continent',x:-1000000,y:-1000000},
+    b:{id:'b',boardId:'world',type:'continent',x:1000000,y:1000000},
+  },routes:{road:{id:'road',boardId:'world',fromPlaceId:'a',toPlaceId:'b'}}};
+  const layout=buildLayout(atlas);
+  assert.equal(layout.routeCells[0].size,0);
+  assert.ok(layout.longRoutes[0].has('road'));
+  const all={left:-2000000,top:-2000000,right:2000000,bottom:2000000};
+  assert.deepEqual(nearbyPlaces(layout,0,all),['a','b']);
+  assert.deepEqual(nearbyRoutes(layout,0,all),['road']);
+  assert.deepEqual(nearbyRoutes(layout,0,{left:0,top:0,right:300,bottom:300}),['road']);
+  assert.deepEqual(nearbyPlaces(layout,0,{left:0,top:0,right:300,bottom:300}),[]);
+});

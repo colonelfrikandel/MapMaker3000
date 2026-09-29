@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node dev-server.js",
-    "test": "node --test src/*.test.js"
+    "test": "node --test src/*.test.js",
+    "benchmark:world": "node benchmark-world.js"
   }
 }
