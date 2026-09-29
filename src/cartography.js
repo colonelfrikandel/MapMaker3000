@@ -84,8 +84,10 @@ function room(w, h, rand, name) {
   out += `<path d="M${door} ${n(y+bh)}h21" stroke="#d8c5a1" stroke-width="7"/><path d="M${door} ${n(y+bh)}v-19a19 19 0 0 1 19 19" fill="none" stroke="#6d5a43" stroke-width="1.5"/>`;
   out += `<path d="M20 20h${n(w-40)}M20 ${n(h*.43)}h${n(w-40)}M20 ${n(h*.7)}h${n(w-40)}" stroke="#bda987" stroke-width=".7" opacity=".55"/>`;
   const lower = name.toLowerCase();
-  if (/bed|sleep|chamber/.test(lower)) {
+  if (/bed|sleep|chamber|guest/.test(lower)) {
     out += `<rect x="20" y="24" width="40" height="29" rx="2" fill="#8b6652" stroke="#534336" stroke-width="1.5"/><rect x="22" y="27" width="11" height="23" fill="#e6d9bb"/><rect x="35" y="27" width="22" height="23" fill="#aa8e79"/>`;
+  } else if (/kitchen/.test(lower)) {
+    out += `<rect x="20" y="20" width="${n(w-40)}" height="14" fill="#948875" stroke="#614b35" stroke-width="1.5"/><rect x="20" y="34" width="20" height="${n(h-65)}" fill="#aa9070" stroke="#614b35"/><circle cx="${n(w-51)}" cy="27" r="5" fill="#4b4841"/><circle cx="${n(w-68)}" cy="27" r="5" fill="#4b4841"/><rect x="${n(w*.43)}" y="${n(h*.48)}" width="35" height="20" fill="#aa855f" stroke="#614b35"/>`;
   } else if (/cellar|store|pantry/.test(lower)) {
     for (let i=0;i<3;i++) out += `<rect x="${24+i*24}" y="24" width="17" height="17" fill="#af885b" stroke="#614b35" stroke-width="1.5"/><path d="M${28+i*24} 24v17" stroke="#74583e"/>`;
   } else {
@@ -118,6 +120,37 @@ export function artworkForPlace(item) {
 }
 
 export function artworkForBoard(board, atlas) {
+  if (board.countrysideVillageId && atlas.places[board.countrysideVillageId]) {
+    const village=atlas.places[board.countrysideVillageId];
+    const base=atlas.boards?.[village.childBoardId]?.baseMap;
+    const scale=152/1010, ox=village.x, oy=village.y+(98-630*scale)/2;
+    const project=([x,y])=>[n(ox+x*scale),n(oy+y*scale)];
+    const rand=random(hash(board.id || board.name));
+    let art='<rect width="1010" height="630" fill="#e3e2d7"/>';
+    for(let i=0;i<32;i++) {
+      const x=n(rand()*930),y=n(rand()*570);
+      art+=`<rect x="${x}" y="${y}" width="${n(35+rand()*65)}" height="${n(20+rand()*40)}" rx="7" fill="${i%2?'#d9cd98':'#b5c190'}" stroke="#9ca77d" stroke-width="1"/>`;
+    }
+    art+=trees(rand,170,1010,630,'#7d966d');
+    for(const river of base?.layers.rivers || []) {
+      const points=river.points.map(project), first=points[0],last=points.at(-1);
+      const route=`M${n(first[0]-60)} 0 Q${n(first[0]+40)} ${n(first[1]/2)} ${first.join(' ')} L${points.map(p=>p.join(' ')).join('L')} Q${n(last[0]-45)} ${n(last[1]+130)} ${n(last[0]+75)} 630`;
+      art+=`<path d="${route}" fill="none" stroke="#5e9fb0" stroke-width="${river.width*2*scale}"/><path d="${route}" fill="none" stroke="#65a9ba" stroke-width="${river.width*scale}"/>`;
+    }
+    if(base?.layout==='coastal' && base.layers.water.length) {
+      const shore=base.layers.water[0].slice(0,-2).map(project),first=shore[0],last=shore.at(-1);
+      art+=`<path d="M${first[0]} 0L${shore.map(p=>p.join(' ')).join('L')}L${last[0]} 630H1010V0Z" fill="#5e9fb0" stroke="#d1c6a2" stroke-width="2"/>`;
+    }
+    for(const road of base?.layers.roads || []) {
+      const points=road.points.map(project);
+      const extend=(p)=>p[0]<=0?[0,project(p)[1]]:p[0]>=1010?[1010,project(p)[1]]:p[1]<=0?[project(p)[0],0]:p[1]>=630?[project(p)[0],630]:null;
+      const first=extend(road.points[0]),last=extend(road.points.at(-1));
+      if(first) points.unshift(first);if(last) points.push(last);
+      const route=`M${points.map(p=>p.join(' ')).join('L')}`;
+      art+=`<path d="${route}" fill="none" stroke="#665b50" stroke-width="${road.width*scale}"/><path d="${route}" fill="none" stroke="#d9d1ba" stroke-width="${Math.max(1,road.width-2)*scale}"/>`;
+    }
+    return `<svg viewBox="0 0 1010 630" aria-hidden="true">${art}</svg>`;
+  }
   if (board.kind === 'world') {
     const realms = board.placeIds.map(id => atlas.places[id]).filter(item => item?.type === 'continent').map(item => {
       const [w,h] = cardSize(item.type);

@@ -1,6 +1,7 @@
 // MapMaker 3000 — GPL-3.0-or-later. See LICENSE.
 // Original, seeded settlement geometry. Coordinates are local to a 1010 × 630 board.
 const W = 1010, H = 630;
+import { generateVillage } from './village-generator.js';
 const round = n => Math.round(n * 10) / 10;
 const point = (x, y) => [round(x), round(y)];
 
@@ -31,8 +32,9 @@ function rectangle(cx, cy, width, height, angle) {
 
 function line(points, width) { return { points: points.map(([x,y]) => point(x,y)), width }; }
 
-export function generateTownBase(kind, seed, size = 'standard') {
+export function generateTownBase(kind, seed, size = 'standard', reserved = [], options = {}) {
   if (!['town', 'village'].includes(kind) || !['small', 'standard', 'large'].includes(size)) throw new Error('Invalid town settings');
+  if (kind === 'village') return generateVillage(seed, size, reserved, options);
   const rng = randomFor(`${kind}:${seed.trim()}:${size}`);
   const town = kind === 'town';
   const factor = { small: .74, standard: 1, large: 1.18 }[size];
