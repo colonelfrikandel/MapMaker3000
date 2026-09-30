@@ -76,8 +76,12 @@ function validateLayers(atlas) {
   for (const [id, world] of Object.entries(atlas.worlds)) {
     if (atlas.boards[id]?.kind !== 'world' || world?.id !== id || !['legacy-realms','independent'].includes(world.mode)) throw new Error('Invalid world reference or unsupported generation mode');
     if(world.mode==='independent') {
-      if(world.generator?.name!=='continent' || !['1','2'].includes(world.generator?.version)) throw new Error('Unsupported world generator');
+      if(world.generator?.name!=='continent' || !['1','2','3','4'].includes(world.generator?.version)) throw new Error('Unsupported world generator');
       validateContinentSettings(world.settings);
+      if(world.terrainHeightmap!=null) {
+        const h=world.terrainHeightmap;
+        if(h.version!==1||h.seaLevel!==20||!Number.isInteger(h.nx)||!Number.isInteger(h.ny)||h.nx<1||h.ny<1||h.nx*h.ny>140000||!Array.isArray(h.values)||h.values.length!==h.nx*h.ny||h.values.some(v=>!Number.isInteger(v)||v<0||v>100))throw new Error('Invalid terrain heightmap');
+      }
       if(typeof world.seed!=='string' || !world.seed.trim() || world.seed.length>200) throw new Error('Invalid continent seed');
       if(!Object.values(world.geography || {}).some(item=>item?.type==='coastline')) throw new Error('Missing continent coastline');
     } else if (world.generator?.name !== 'realm-contours' || world.generator?.version !== 'gentle-inlets-5') throw new Error('Unsupported world generator');

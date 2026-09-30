@@ -1,5 +1,6 @@
 import { forestSvg } from './forest-renderer.js';
 import { seedStream } from './seeds.js';
+import { sampleTerrainHeight, terrainElevation } from './terrain-heightmap.js';
 import { contourField } from './landmass.js';
 import { prepareBiomes, displayedBiomes, simplifyLine, simplifyRing } from './smooth-regions.js';
 
@@ -47,7 +48,7 @@ function regions(mask,nx,ny,step,x,y,type,seed) {
   return result.map(({points,holes},i)=>({id:`natural-${type}-${i}`,type,points,holes,editState:'generated',protected:false,provenance:{kind:'generator',seed,generatorVersion:'natural-1'}}));
 }
 
-export function generateNaturalGeography(world,seed=world.seed) {
+export function generateNaturalGeography(world,seed=world.seed,options={}) {
   const coasts=Object.values(world.geography).filter(g=>g.type==='coastline').map(g=>g.points);
   let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
   for(const ring of coasts)for(const [x,y]of ring){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
@@ -63,6 +64,7 @@ export function generateNaturalGeography(world,seed=world.seed) {
     const ridge=Math.exp(-(((u-(.4+Math.sin(v*5+phase[0])*.16))/.065)**2));
     const second=Math.exp(-(((v-(.65+Math.sin(u*5+phase[1])*.12))/.07)**2));
     elevation[i]=land[i]?round(90+ridge*1800+second*900+170*(Math.sin(u*16+phase[2])*Math.cos(v*13+phase[3])+1)):0;
+    if(world.terrainHeightmap) elevation[i]=land[i]?round(terrainElevation(sampleTerrainHeight(world.terrainHeightmap,world.settings,x,y))):0;
     temperature[i]=round(28-Math.abs(70-v*95)*.55-elevation[i]*.0065);
     const west=i%nx>0?elevation[i-1]:0;
     rainfall[i]=round(clamp(850+600*Math.sin(v*5+phase[4])+240*Math.cos(u*6+phase[5])+(elevation[i]-west)*1.8,100,2400));
@@ -82,7 +84,7 @@ export function generateNaturalGeography(world,seed=world.seed) {
   const lake=land.map((v,i)=>Number(v&&drainage.filled[i]-elevation[i]>35));
   const riverThreshold=Math.max(12,land.reduce((a,b)=>a+b,0)/100);
   const river=land.map((v,i)=>Number(v&&flow[i]>riverThreshold));
-  const types=land.map((v,i)=>{
+  const types=options.biomes===false?[]:land.map((v,i)=>{
     if(!v||lake[i])return 'water';
     const x=i%nx,y=Math.floor(i/nx);
     let wet=false;
@@ -109,7 +111,8 @@ export function generateNaturalGeography(world,seed=world.seed) {
     const id=`natural-river-${i}`;
     geography[id]={id,type:'river',points:cells.map(point),width:step*clamp(Math.sqrt(flow[i])*.045,.12,.6),cells,editState:'generated',protected:false,provenance:{kind:'generator',seed,generatorVersion:'natural-1'}};
   }
-  for(const type of Object.keys(BIOME_COLORS)) for(const item of regions(types.map(t=>t===type),nx,ny,step,left,top,type,seed)) biomes[item.id]={...item,priority:0};
+  if(options.biomes!==false)for(const type of Object.keys(BIOME_COLORS)) for(const item of regions(types.map(t=>t===type),nx,ny,step,left,top,type,seed)) biomes[item.id]={...item,priority:0};
+  if(world.terrainHeightmap)for(const item of [...Object.values(geography),...Object.values(biomes)])item.provenance.generatorVersion='natural-azgaar-heightmap-1';
   return {geography,biomes:prepareBiomes(biomes,step),fields:{version:1,seed,nx,ny,step,x:left,y:top,land,elevation,temperature,rainfall,filled:drainage.filled.map(round),downstream:drainage.downstream}};
 }
 

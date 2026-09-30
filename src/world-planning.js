@@ -16,15 +16,19 @@ export function previewContinent(atlas,boardId,seed,settings,options={}) {
     const world=draft.worlds[boardId];
     const generated=Object.fromEntries(terrain.rings.map((points,i)=>{
       const id=`coastline-${i}`;
-      return [id,{id,type:'coastline',points,editState:'generated',protected:false,provenance:{kind:'generator',seed,generatorVersion:'continent-2'}}];
+      return [id,{id,type:'coastline',points,editState:'generated',protected:false,provenance:{kind:'generator',seed,generatorVersion:`continent-${settings.shapeVersion||2}`}}];
     }));
     const other=Object.fromEntries(Object.entries(world.geography).filter(([,item])=>item.type!=='coastline'));
     const coasts=Object.fromEntries(Object.entries(world.geography).filter(([,item])=>item.type==='coastline'));
     if(!keepCoastline) world.geography={...other,...mergeGeneratedLayer(coasts,generated)};
-    world.mode='independent';if(!keepCoastline){world.generator={name:'continent',version:'2'};world.landformHistory=terrain.history;}
+    world.mode='independent';if(!keepCoastline){world.generator={name:'continent',version:String(settings.shapeVersion||2)};world.landformHistory=terrain.history;}
     if(!keepCoastline) {world.seed=seed;world.settings=structuredClone(settings);}
-    if(options.natural) {
-      const natural=generateNaturalGeography(world,seed);
+    if(!keepCoastline) {
+      if(terrain.heightmap)world.terrainHeightmap=terrain.heightmap;
+      else delete world.terrainHeightmap;
+    }
+    if(options.natural||options.physical) {
+      const natural=generateNaturalGeography(world,seed,{biomes:!options.physical});
       const existing=Object.fromEntries(Object.entries(world.geography).filter(([,g])=>['river','lake','mountain'].includes(g.type)));
       const otherLayers=Object.fromEntries(Object.entries(world.geography).filter(([,g])=>!['river','lake','mountain'].includes(g.type)));
       world.geography={...otherLayers,...mergeGeneratedLayer(existing,natural.geography)};

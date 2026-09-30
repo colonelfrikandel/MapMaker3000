@@ -155,6 +155,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 dialog { max-width: 430px; padding: 24px 27px; border: 1px solid #a68454; border-radius: 3px; background: #292720; color: #e8d9bb; box-shadow: 0 20px 70px #0009; }
 #generator-dialog { max-height: calc(100vh - 32px); overflow-y: auto; }
+#generator-dialog { width: min(540px, calc(100vw - 32px)); max-width: 540px; box-sizing: border-box; }
+.continent-slider > span { display: flex; justify-content: space-between; gap: 12px; }
+.continent-slider output { font-variant-numeric: tabular-nums; color: #f0e1c6; }
+.generator-field input[type="range"] { padding: 0; height: 22px; accent-color: #c29d63; cursor: pointer; }
+.continent-slider .slider-endpoints { color: #c7b79b; font-size: 10px; font-weight: 400; letter-spacing: 0; }
+#continent-advanced { margin-top: 18px; }
+#continent-advanced summary { cursor: pointer; color: #c7b79b; font-size: 12px; }
+.continent-dimensions { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 0 12px; }
+.world-generation #generator-world-options > .generator-field { display: none; }
+.world-generation .generator-map-preview { position: sticky; top: -24px; z-index: 2; height: clamp(140px, 25vh, 230px); box-sizing: border-box; }
+.world-generation .generator-actions { z-index: 3; }
 dialog::backdrop { background: #0a0808c4; }
 .dialog-top { display: flex; justify-content: space-between; align-items: center; }
 dialog h2 { font: 600 21px Cinzel, Georgia, serif; margin: 16px 0; }

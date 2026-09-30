@@ -1,6 +1,8 @@
 import { installSessionReview } from './session-review-ui.js';
 import { samplePlaceEnvironment, environmentDescription } from './environment.js';
 import { DEFAULT_CONTINENT } from './continent.js';
+import { CONTINENT_SLIDERS, shapeControls } from './continent-controls.js';
+import { AZGAAR_TEMPLATES } from './azgaar-terrain.js';
 import { installBiomeEditor } from './biome-editor-ui.js';
 import { previewContinent } from './world-planning.js';
 import { createHistory, createPreview } from './editor.js';
@@ -560,19 +562,25 @@ function generatorPlan(boardId, seed, size) {
   return planDetails(target.kind, seed, size, target.placeIds.map(place).filter(Boolean));
 }
 function updateGeneratorPreview() {
+  clearTimeout(continentPreviewTimer);
   generationPreview?.cancel(); generationPreview = null;
   if (!generatorBoardId || !atlas.boards[generatorBoardId]) return;
   const seed = els.generatorSeed.value.trim();
   const target = atlas.boards[generatorBoardId];
   if (target.kind === 'world' && $('#generator-world-mode').value === 'independent') {
     try {
-      const settings = {preset:$('#continent-preset').value};
-      for (const key of ['width','height','centerX','centerY','roughness','drift','erosion']) settings[key] = Number($('#continent-'+key).value);
-      const result = previewContinent(atlas,target.id,seed,settings,{natural:false,keepCoastline:$('#continent-keep').checked});
+      const settings = shapeControls({...DEFAULT_CONTINENT,orientation:$('#continent-orientation').value});
+      for (const key of [...CONTINENT_SLIDERS.map(c=>c.key),'width','height','centerX','centerY']) settings[key] = Number($('#continent-'+key).value);
+      if($('#continent-backend').value==='azgaar') {
+        settings.shapeVersion=4;settings.azgaarTemplate=$('#azgaar-template').value;
+      }
+      const result = previewContinent(atlas,target.id,seed,settings,{physical:$('#continent-physical').checked,keepCoastline:$('#continent-keep').checked});
       generationPreview = result.transaction;
       const candidate = generationPreview.candidate;
       els.generatorMapPreview.innerHTML = artworkForBoard(candidate.boards[target.id],candidate);
       const svg=els.generatorMapPreview.firstElementChild;
+      const frame=candidate.worlds[target.id].settings;
+      svg.setAttribute('viewBox',`${frame.centerX-frame.width/2} ${frame.centerY-frame.height/2} ${frame.width} ${frame.height}`);
       for(const realm of worldRealms(target,atlas)) {
         const marker=document.createElementNS('http://www.w3.org/2000/svg','circle');
         marker.setAttribute('cx',realm.x);marker.setAttribute('cy',realm.y);
@@ -584,7 +592,9 @@ function updateGeneratorPreview() {
         (atlas.schemaVersion === 1 ? 'Applying also upgrades the atlas to format 2. ' : '') +
         (result.offshore.length ? result.offshore.length+' realm center(s) fall in water: '+result.offshore.join(', ')+'. Adjust the dimensions, center or seed if needed.' : 'All existing realm centers lie on land.');
       const process=candidate.worlds[target.id].landformHistory;
-      if(process)els.generatorPreview.textContent += ' Shape history: '+process.plateCount+' continental blocks, '+Math.round(process.drift*100)+'% separation, '+Math.round(process.erosion*100)+'% erosion. Land only; biomes remain manual.';
+      if(process?.version===4)els.generatorPreview.textContent += ' Azgaar '+AZGAAR_TEMPLATES.find(t=>t.id===process.template)?.name+' terrain. '+($('#continent-physical').checked?'Mountains, rivers and lakes follow the heightmap.':'Coastline only.')+' Biomes and settlements are yours to discover.';
+      else if(process?.version===3)els.generatorPreview.textContent += ' Land only; biomes remain manual. Randomize explores another shape with the same settings.';
+      else if(process)els.generatorPreview.textContent += ' Shape history: '+process.plateCount+' continental blocks, '+Math.round(process.drift*100)+'% separation, '+Math.round(process.erosion*100)+'% erosion. Land only; biomes remain manual.';
       els.generatorApply.disabled = false;
     } catch(error) {
       els.generatorMapPreview.replaceChildren(); els.generatorPreview.textContent = error.message; els.generatorApply.disabled = true;
@@ -957,7 +967,7 @@ els.generateButton.addEventListener('click', () => {
   generatorBoardId = currentBoardId;
   els.generatorTitle.textContent = board().kind === 'world' ? `Generate ${board().name}` : board().kind === 'house' ? `Fill ${board().name} with rooms` : `Generate ${board().name}`;
   els.generatorIntro.textContent = board().kind === 'world' ?
-    'Preview a new coastline. Choose Independent continent to generate land from a seed and preset, separately from your realms.' : board().kind === 'house' ?
+    'Choose a landscape template and Randomize to explore its terrain. Apply when you are happy with the preview. The MapMaker sliders are also available.' : board().kind === 'house' ?
     'Create a repeatable room layout with passages. Your existing rooms and notes stay where they are.' :
     'Choose the landscape and preview a new layout. Kept places stay fixed. Names, notes, events and interiors are always retained.';
   els.generatorApply.textContent = board().kind === 'world' ? 'Use this world map' : board().kind === 'house' ? 'Add rooms' : 'Use these surroundings';
@@ -965,12 +975,24 @@ els.generateButton.addEventListener('click', () => {
   const independent = atlas.worlds?.[board().id]?.mode === 'independent';
   $('#generator-world-mode').value = 'independent';
   $('#generator-world-mode').disabled = true;
-  const settings = atlas.worlds?.[board().id]?.settings || DEFAULT_CONTINENT;
-  $('#continent-preset').value = settings.preset;
-  for (const key of ['width','height','centerX','centerY','roughness','drift','erosion']) $('#continent-'+key).value = settings[key] ?? DEFAULT_CONTINENT[key];
+  const settings = shapeControls({...DEFAULT_CONTINENT,...atlas.worlds?.[board().id]?.settings});
+  $('#continent-backend').value='azgaar';
+  $('#azgaar-template').value=settings.azgaarTemplate||'continents';
+  $('#continent-orientation').value=settings.orientation;
+  for (const key of [...CONTINENT_SLIDERS.map(c=>c.key),'width','height','centerX','centerY']) $('#continent-'+key).value = settings[key];
+  updateSliderLabels();
+  const worldMode=board().kind==='world';
+  els.generatorDialog.classList.toggle('world-generation',worldMode);
+  if(worldMode)$('#generator-world-options').before(els.generatorMapPreview);
+  else els.generatorPreview.before(els.generatorMapPreview);
+  const seedField=els.generatorSeed.closest('label');
+  if(worldMode)$('#continent-seed-slot').append(seedField);
+  else $('#generator-world-options').before(seedField);
+  $('#generator-reroll').textContent=worldMode?'↻ Randomize':'↻ New seed';
   $('#continent-settings').hidden = false;
   $('#continent-keep-field').hidden = !independent;
   $('#continent-keep').checked = false;
+  $('#continent-physical').checked = true;
   updateCoastControls();
   $('#generator-decoration-field').hidden = !['town','village'].includes(board().kind);
   $('#generator-decoration-seed').value = board().baseMap?.decorationSeed || '';
@@ -980,7 +1002,8 @@ els.generateButton.addEventListener('click', () => {
   $('#generator-keep-geography').checked = board().keepGeography !== false;
   els.generatorSeed.value = crypto.randomUUID().slice(0, 8);
   els.generatorSize.value = 'standard';
-  updateGeneratorPreview(); els.generatorDialog.showModal(); els.generatorSeed.focus();
+  updateGeneratorPreview(); els.generatorDialog.showModal();
+  (worldMode?$('#azgaar-template'):els.generatorSeed).focus();
 });
 els.generatorSeed.addEventListener('input', updateGeneratorPreview);
 els.generatorSize.addEventListener('change', updateGeneratorPreview);
@@ -988,10 +1011,39 @@ $('#generator-world-mode').addEventListener('change', () => {
   $('#continent-settings').hidden = $('#generator-world-mode').value !== 'independent'; updateGeneratorPreview();
 });
 function updateCoastControls() {
-  for(const key of ['preset','width','height','centerX','centerY','roughness','drift','erosion']) $('#continent-'+key).disabled=$('#continent-keep').checked;
+  for(const key of [...CONTINENT_SLIDERS.map(c=>c.key),'orientation','width','height','centerX','centerY']) $('#continent-'+key).disabled=$('#continent-keep').checked;
+  const azgaar=$('#continent-backend').value==='azgaar';
+  $('#continent-sliders').hidden=azgaar;
+  $('#continent-orientation').closest('label').hidden=azgaar;
+  $('#azgaar-template-field').hidden=!azgaar;
+  $('#azgaar-credit').hidden=!azgaar;
+  $('#continent-backend').disabled=$('#continent-keep').checked;
+  $('#azgaar-template').disabled=$('#continent-keep').checked;
 }
+for(const {id,name} of AZGAAR_TEMPLATES) {
+  const option=document.createElement('option');option.value=id;option.textContent=name;
+  $('#azgaar-template').append(option);
+}
+$('#continent-backend').addEventListener('change',()=>{updateCoastControls();updateGeneratorPreview();});
+$('#azgaar-template').addEventListener('change',updateGeneratorPreview);
+$('#continent-physical').addEventListener('change',updateGeneratorPreview);
 $('#continent-keep').addEventListener('change',()=>{updateCoastControls();updateGeneratorPreview();});
-for (const id of ['continent-preset','continent-width','continent-height','continent-centerX','continent-centerY','continent-roughness','continent-drift','continent-erosion']) $('#'+id).addEventListener('change',updateGeneratorPreview);
+let continentPreviewTimer;
+function updateSliderLabels() {
+  for(const {key} of CONTINENT_SLIDERS)$('#continent-'+key+'-value').value=Math.round(Number($('#continent-'+key).value)*100)+'%';
+}
+for(const control of CONTINENT_SLIDERS) {
+  const label=document.createElement('label');label.className='generator-field continent-slider';label.htmlFor='continent-'+control.key;
+  label.innerHTML=`<span>${control.label}<output id="continent-${control.key}-value" for="continent-${control.key}"></output></span><input id="continent-${control.key}" type="range" min="0" max="1" step="0.01" value="${control.default}" /><span class="slider-endpoints"><span>${control.low}</span><span>${control.high}</span></span>`;
+  $('#continent-sliders').append(label);
+  label.querySelector('input').addEventListener('input',()=>{
+    updateSliderLabels();
+    generationPreview?.cancel();generationPreview=null;els.generatorApply.disabled=true;
+    els.generatorPreview.textContent='Updating coastline preview…';
+    clearTimeout(continentPreviewTimer);continentPreviewTimer=setTimeout(updateGeneratorPreview,180);
+  });
+}
+for (const key of ['orientation','width','height','centerX','centerY']) $('#continent-'+key).addEventListener('input',updateGeneratorPreview);
 $('#generator-decoration-seed').addEventListener('input', updateGeneratorPreview);
 $('#generator-village-type').addEventListener('change', updateGeneratorPreview);
 $('#generator-keep-geography').addEventListener('change', () => {
@@ -1002,6 +1054,7 @@ $('#generator-reroll').addEventListener('click', () => { els.generatorSeed.value
 $('#generator-close').addEventListener('click', () => els.generatorDialog.close());
 $('#generator-cancel').addEventListener('click', () => els.generatorDialog.close());
 els.generatorDialog.addEventListener('close', () => {
+  clearTimeout(continentPreviewTimer);
   generationPreview?.cancel(); generationPreview = null; generatorBoardId = null;
 });
 els.generatorApply.addEventListener('click', () => {

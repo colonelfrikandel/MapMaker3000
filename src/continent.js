@@ -1,4 +1,7 @@
 import { continentalField } from './continental-process.js';
+import { controlledContinentField } from './continent-shape.js';
+import { CONTINENT_SLIDERS } from './continent-controls.js';
+import { azgaarField, AZGAAR_TEMPLATES } from './azgaar-terrain.js';
 import { contourField, MAX_TERRAIN_SAMPLES } from './landmass.js';
 import { naturalSvg } from './natural-geography.js';
 import { territorySvg } from './territories.js';
@@ -13,6 +16,12 @@ export function validateContinentSettings(settings) {
       Math.abs(settings.centerX)>1e9 || Math.abs(settings.centerY)>1e9 ||
       settings.roughness<0 || settings.roughness>1 || settings.width/settings.height>10 || settings.height/settings.width>10) throw new Error('Choose dimensions from 200 to 1,000,000, an aspect ratio within 10:1, and roughness from 0 to 1.');
   for(const key of ['drift','erosion'])if(settings[key]!=null&&(!Number.isFinite(settings[key])||settings[key]<0||settings[key]>1))throw new Error('Drift and erosion must be from 0 to 1.');
+  if(settings.shapeVersion===4) {
+    if(!AZGAAR_TEMPLATES.some(t=>t.id===settings.azgaarTemplate))throw new Error('Choose an Azgaar landscape template.');
+  } else if(settings.shapeVersion!=null) {
+    if(settings.shapeVersion!==3 || !['horizontal','vertical'].includes(settings.orientation))throw new Error('Unsupported continent shape settings.');
+    for(const {key,label} of CONTINENT_SLIDERS)if(!Number.isFinite(settings[key])||settings[key]<0||settings[key]>1)throw new Error(`${label} must be from 0 to 1.`);
+  }
   return settings;
 }
 
@@ -24,9 +33,11 @@ export function generateContinent(seed, settings = DEFAULT_CONTINENT) {
   const step=Math.max(width/300,height/300,Math.sqrt(width*height/80000));
   const nx=Math.ceil(width/step)+1,ny=Math.ceil(height/step)+1;
   if(nx*ny>MAX_TERRAIN_SAMPLES)throw new Error('Terrain sample budget exceeded');
-  const {field,history}=continentalField(seed,settings,nx,ny,step);
+  const generate=settings.shapeVersion===4?azgaarField:settings.shapeVersion===3?controlledContinentField:continentalField;
+  const {field,history,heightmap}=generate(seed,settings,nx,ny,step);
   const terrain=contourField(field,nx,ny,step,centerX-width/2,centerY-height/2);
   terrain.history=history;
+  if(heightmap)terrain.heightmap=heightmap;
   if(!terrain.rings.length) throw new Error('No land generated. Try a different seed.');
   return terrain;
 }
