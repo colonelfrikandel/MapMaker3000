@@ -167,6 +167,11 @@ dialog { max-width: 430px; padding: 24px 27px; border: 1px solid #a68454; border
 .world-generation .generator-map-preview { position: sticky; top: -24px; z-index: 2; height: clamp(140px, 25vh, 230px); box-sizing: border-box; }
 .world-generation .generator-actions { z-index: 3; }
 dialog::backdrop { background: #0a0808c4; }
+#atlas-search-dialog, #layers-dialog { width: min(460px, calc(100vw - 32px)); box-sizing: border-box; max-height: calc(100vh - 32px); overflow-y: auto; }
+.atlas-search-results { display: grid; gap: 8px; max-height: 45vh; overflow-y: auto; }
+.atlas-search-result { display: grid; gap: 4px; padding: 12px; text-align: left; background: #32302b; border: 1px solid #6e5a43; color: #f0e1c6; border-radius: 3px; }
+.atlas-search-result small { color: #c7b79b; }
+.atlas-search-result:focus-visible { outline: 2px solid #c29d63; outline-offset: -2px; }
 .dialog-top { display: flex; justify-content: space-between; align-items: center; }
 dialog h2 { font: 600 21px Cinzel, Georgia, serif; margin: 16px 0; }
 dialog p { color: #c7b79b; font-size: 13px; line-height: 1.6; }
@@ -200,8 +205,8 @@ dialog .primary-button { margin-top: 10px; }
   .connect-button { min-width: 108px; height: 70px; margin: 0; }
   .palette-item { min-width: 90px; min-height: 70px; }
   .workspace { padding-bottom: 100px; }
-  .topbar { height: 52px; padding: 0 12px; }
-  .top-actions { gap: 8px; }
+  .topbar { height: auto; min-height: 52px; padding: 8px 12px; flex-wrap: wrap; gap: 6px; }
+  .top-actions { gap: 8px; flex-wrap: wrap; max-width: 100%; }
   .top-actions .text-button { font-size: 10px; }
   .map-header { min-height: 104px; padding: 13px 17px; }
   .map-header h1 { font-size: 17px; }
@@ -236,3 +241,18 @@ dialog .primary-button { margin-top: 10px; }
 
 #session-review { width:min(820px,90vw); max-height:85vh; overflow:auto; background:#292720; color:#eadabc; border:1px solid #a68454; }
 #session-review label {display:block;margin:12px 0} #session-review label:not(.session-choice) input,#session-review textarea {display:block;width:100%;box-sizing:border-box;background:#201e18;color:#eadabc;padding:8px;border:1px solid #a68454} #session-review .session-choice{display:flex;gap:10px;align-items:center} .session-map-comparison{display:grid;grid-template-columns:1fr 1fr;gap:12px}.session-map-comparison svg{width:100%;max-height:260px} #session-review blockquote{font-size:13px;border-left:2px solid #a68454;padding-left:12px}
+
+#sessions-dialog { width:min(800px,94vw); max-width:800px; max-height:90vh; overflow:auto; }
+#sessions-dialog form > label {display:grid; gap:6px; margin:14px 0;}
+#sessions-dialog textarea {width:100%;box-sizing:border-box;resize:vertical;}
+.session-toolbar,.session-place-row {display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0;}
+.session-toolbar select,.session-place-row > span {flex:1;min-width:130px;}
+.session-place-row label {display:flex;align-items:center;gap:4px;}
+#sessions-dialog [data-field="places"] {max-height:260px;overflow:auto;}
+
+#discovery-review {width:min(1000px,94vw);max-width:1000px;max-height:92vh;overflow:auto;}
+.discovery-map svg {display:block;width:100%;max-height:420px;cursor:crosshair;}
+#discovery-review fieldset {margin:16px 0;padding:14px;}
+#discovery-review fieldset label {display:grid;gap:4px;margin:8px 0;}
+#discovery-review textarea {width:100%;box-sizing:border-box;resize:vertical;}
+#discovery-review blockquote {white-space:pre-wrap;overflow-wrap:anywhere;border-left:3px solid #9c8b69;padding-left:12px;}

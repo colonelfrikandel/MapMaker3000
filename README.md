@@ -14,6 +14,9 @@ Then open `http://127.0.0.1:8765/` in a browser on **the same computer**. `local
 
 ## Current features
 
+- **Find place:** the toolbar search finds names, descriptions, and notes across nested maps. Results show the parent map and focus/select the matching place. Search ignores accents and case; Enter opens the first result and arrow keys move through results.
+- **World layers:** after generating an independent world, use **Layers** to show or hide physical geography, discovered biomes, and political borders. These toggles only change world artwork: geography, environmental context, and campaign data remain intact. Visibility is saved/exported and can be undone. Coastlines and places remain visible.
+
 - **Azgaar terrain baseline:** **Generate world** now defaults to Azgaar terrain with its 14 original procedural landscape templates, including Continents, Pangea, High Island, and Archipelago. Choose a template, use **Randomize**, inspect the preview, then apply. **Include mountains, rivers and lakes** uses the saved Azgaar heightmap with MapMaker's drainage and rendering; uncheck it for coastlines only. Forests, deserts, and other biomes remain unassigned, and no new settlements are generated. Existing campaign locations and manual biomes are preserved. **MapMaker sliders** remains available in the generator selector.
 - Azgaar's MIT-licensed grid and heightmap algorithms are vendored locally with pinned dependencies and license notices in [src/vendor/azgaar](src/vendor/azgaar/README.md). This integrates its terrain recipes, not the full Azgaar application, political simulation, or visual theme. The source heightmap is saved with the atlas and survives export/import. No runtime downloads or API keys are needed.
 
@@ -91,3 +94,18 @@ Each board retains its existing local place coordinates. At render time, its geo
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
+
+### Campaign sessions and clean worlds
+
+New atlases start empty. World generation defaults to a clean, unnamed terrain map with no realms, places, routes or sessions. Review the preview before applying; Cancel preserves the current atlas and Undo restores an applied change. Enable **Keep existing campaign content** to regenerate terrain around an established campaign. Saved/imported atlases are retained until you explicitly replace them.
+
+Use **Sessions** to save a title, date, starting location, notes, Dutch/English transcript and discoveries. Mark visited/discovered places and open them on the map. Records are included in atlas export/import and support Undo/Redo. Text is stored verbatim without automatic map changes. Towns and villages can be added directly to the world without creating a realm first.
+
+### Review discoveries from a session
+
+1. Open **Sessions**, enter notes or a Dutch/English transcript, and choose **Save & review discoveries**.
+2. Review the suggested places, biomes, routes and events alongside their original source passages. Local text rules recognize phrases such as `the village "Oakvale"` or `het dorp "Berkdam"`, biome mentions, roads and events. This is rule-based assistance, not AI story interpretation; negatives/uncertainty are skipped and suggestions can be incomplete. Add missed discoveries manually.
+3. Edit names, types and details. Choose **Accept**, **Reject**, or leave **Review later**. For places and biomes use **Position on map** and click the preview, or enter coordinates; adjust biome radius. Routes need two places on the same map; events need a location. Newly accepted places can be used immediately as endpoints or event locations.
+4. Choose **Apply accepted / save review**. Only accepted proposals change the map. Missing positions or invalid references prevent the entire batch from applying. Pending/rejected decisions are saved, and applied proposals are not duplicated when reopening a review.
+
+Each addition retains its session and source passage. Review decisions and links travel with atlas exports; applying supports Undo/Redo. If session text changes, earlier proposals retain their original sources and **Find more suggestions** checks the updated text. Close without saving to discard review edits. Review is limited to 100 proposals per session.

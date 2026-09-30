@@ -126,7 +126,7 @@ export function naturalSvg(world) {
     return d+(closed?'Z':`T${points.at(-1).map(round).join(' ')}`);
   };
   const polygon=item=>[path(item.points),...(item.holes||[]).map(r=>path(r))].join('');
-  const step=world.fields?.step||10,biomes=Object.values(displayedBiomes(world)).sort((a,b)=>a.priority-b.priority||a.id.localeCompare(b.id));
+  const step=world.fields?.step||10,biomes=world.showBiomes===false?[]:Object.values(displayedBiomes(world)).sort((a,b)=>a.priority-b.priority||a.id.localeCompare(b.id));
   let hash=2166136261;for(const c of JSON.stringify([world.seed,world.fields?.seed,biomes]))hash=Math.imul(hash^c.charCodeAt(0),16777619);
   const filter=`biome-blend-${(hash>>>0).toString(36)}`;
   const fills=biomes.filter(item=>item.type!=='forest').map(item=>`<path d="${polygon(item)}" fill="${BIOME_COLORS[item.type]||BIOME_COLORS.grassland}" fill-rule="evenodd"/>`).join('');
@@ -142,11 +142,11 @@ export function naturalSvg(world) {
       const x=round(f.x+(gx+(random()-.5)*.5)*step),y=round(f.y+(gy+(random()-.5)*.5)*step),s=step*.65;
       if(Object.values(world.geography).some(g=>g.type==='lake'&&containsPolygon(g.points,x,y)))continue;
       const biome=[...biomes].reverse().find(b=>containsPolygon(b.points,x,y)&&!(b.holes||[]).some(h=>containsPolygon(h,x,y)))?.type;
-      if(f.elevation[cell]>1200&&i%2===0) {const m=s*2;svg+=`<path d="M${round(x-m)} ${round(y+m*.4)}L${x} ${round(y-m)}L${round(x+m)} ${round(y+m*.4)}L${round(x+m*.15)} ${round(y+m*.05)}L${round(x-m*.1)} ${round(y-m*.5)}L${round(x-m*.3)} ${round(y+m*.3)}Z" fill="#d6d4b8" stroke="#666d57" stroke-width="${round(step*.085)}" stroke-linejoin="round"/>`;}
+      if(world.showPhysical!==false&&f.elevation[cell]>1200&&i%2===0) {const m=s*2;svg+=`<path d="M${round(x-m)} ${round(y+m*.4)}L${x} ${round(y-m)}L${round(x+m)} ${round(y+m*.4)}L${round(x+m*.15)} ${round(y+m*.05)}L${round(x-m*.1)} ${round(y-m*.5)}L${round(x-m*.3)} ${round(y+m*.3)}Z" fill="#d6d4b8" stroke="#666d57" stroke-width="${round(step*.085)}" stroke-linejoin="round"/>`;}
       else if(biome==='wetland')svg+=`<path d="M${round(x-s*.5)} ${y}h${round(s)}M${x} ${y}v${round(-s*.5)}m0 ${round(s*.35)}l${round(s*.2)} ${round(-s*.4)}" stroke="#5c785d" fill="none" stroke-width="${round(step*.06)}" opacity=".65"/>`;
     }
   }
-  for(const item of Object.values(world.geography))if(item.type==='river')svg+=`<path d="${curved(simplifyLine(item.points,step*.75))}" fill="none" stroke="#6b9aab" stroke-width="${item.width}" stroke-linecap="round" stroke-linejoin="round"/>`;
-  for(const item of Object.values(world.geography))if(item.type==='lake')svg+=`<path d="${[item.points,...(item.holes||[])].map(r=>curved(simplifyRing(r,step*.65),true)).join('')}" fill="#8babb2" fill-rule="evenodd" stroke="#658792" stroke-width="1"/>`;
+  if(world.showPhysical!==false)for(const item of Object.values(world.geography))if(item.type==='river')svg+=`<path d="${curved(simplifyLine(item.points,step*.75))}" fill="none" stroke="#6b9aab" stroke-width="${item.width}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if(world.showPhysical!==false)for(const item of Object.values(world.geography))if(item.type==='lake')svg+=`<path d="${[item.points,...(item.holes||[])].map(r=>curved(simplifyRing(r,step*.65),true)).join('')}" fill="#8babb2" fill-rule="evenodd" stroke="#658792" stroke-width="1"/>`;
   return svg;
 }

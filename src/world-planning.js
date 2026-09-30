@@ -5,13 +5,16 @@ import { worldSurfaceAt } from './world-generator.js';
 import { worldRealms } from './cartography.js';
 import { generateNaturalGeography } from './natural-geography.js';
 import { prepareBiomes } from './smooth-regions.js';
+import { blankAtlas } from './blank-atlas.js';
 
 export function previewContinent(atlas,boardId,seed,settings,options={}) {
   if(atlas.boards[boardId]?.kind!=='world') throw new Error('Select a world map');
   if(typeof seed!=='string'||!seed.trim()||seed.length>200) throw new Error('Enter a geography seed (up to 200 characters).');
-  const keepCoastline=options.keepCoastline && atlas.worlds?.[boardId]?.mode==='independent';
+  if(options.cleanWorld && boardId!==atlas.rootBoardId)throw new Error('Start a clean world from the root map.');
+  const keepCoastline=!options.cleanWorld && options.keepCoastline && atlas.worlds?.[boardId]?.mode==='independent';
   const terrain=keepCoastline?{rings:[],samples:0}:generateContinent(seed,settings);
   const transaction=createPreview(atlas,draft=>{
+    if(options.cleanWorld){for(const key of Object.keys(draft))delete draft[key];Object.assign(draft,blankAtlas(boardId));}
     if(draft.schemaVersion===1) Object.assign(draft,previewAtlasUpgrade(draft).atlas);
     const world=draft.worlds[boardId];
     const generated=Object.fromEntries(terrain.rings.map((points,i)=>{
@@ -44,6 +47,6 @@ export function previewContinent(atlas,boardId,seed,settings,options={}) {
     }
   },validateAtlas);
   const shape=independentShape(transaction.candidate.worlds[boardId]);
-  const offshore=worldRealms(atlas.boards[boardId],atlas).filter(r=>worldSurfaceAt(shape,r.x,r.y).kind==='water');
+  const offshore=worldRealms(transaction.candidate.boards[boardId],transaction.candidate).filter(r=>worldSurfaceAt(shape,r.x,r.y).kind==='water');
   return {transaction,offshore:offshore.map(r=>r.name),samples:terrain.samples};
 }

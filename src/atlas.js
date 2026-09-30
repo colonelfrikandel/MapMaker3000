@@ -1,4 +1,5 @@
 import { cardSize } from './geometry.js';
+import { validateSessionRecords } from './session-records.js';
 import { validateContinentSettings } from './continent.js';
 import { validateBiomePolygon } from './biome-editor.js';
 import { validateTownBase, nearestTownFootprint } from './town-base.js';
@@ -104,6 +105,7 @@ function validateLayers(atlas) {
     }
     if(world.biomeDeletions!=null&&(!Array.isArray(world.biomeDeletions)||world.biomeDeletions.length>20000||world.biomeDeletions.some(id=>typeof id!=='string')))throw new Error('Invalid deleted biome IDs');
     if(world.showTerritories!=null&&typeof world.showTerritories!=='boolean')throw new Error('Invalid territory visibility');
+    for(const key of ['showBiomes','showPhysical'])if(world[key]!=null&&typeof world[key]!=='boolean')throw new Error('Invalid layer visibility');
     if(world.fields) {
       const f=world.fields,n=f.nx*f.ny;
       if(f.version!==1||typeof f.seed!=='string'||!Number.isInteger(f.nx)||!Number.isInteger(f.ny)||f.nx<2||f.ny<2||n>12000||!Number.isFinite(f.step)||f.step<=0||!Number.isFinite(f.x)||!Number.isFinite(f.y)) throw new Error('Invalid geography grid');
@@ -149,6 +151,7 @@ export function validateAtlas(input) {
   const atlas = structuredClone(input);
   validateLegacyStructure(atlas);
   requireRecord(atlas.sessions, 'sessions');
+  validateSessionRecords(atlas.sessions);
   for (const [id, board] of Object.entries(atlas.boards)) {
     if (board.id !== id || new Set(board.placeIds).size !== board.placeIds.length) throw new Error('Invalid board identity');
     if (board.parentPlaceId != null && atlas.places[board.parentPlaceId]?.childBoardId !== id) throw new Error('Invalid parent reference');
