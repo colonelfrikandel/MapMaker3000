@@ -13,6 +13,38 @@ edits should reproduce the same result. Generated content must remain editable
 and manual changes must be preserved when regeneration is used.
 
 
+Implementation status (2026-09-30)
+----------------------------------
+
+Completed items are checked here so this file remains a useful project tracker:
+
+- [x] Integrate the open-source Azgaar heightmap/grid subset locally, with the
+  original templates, deterministic seeds, license notices, and no runtime
+  network dependency.
+- [x] Add the Azgaar terrain selector, template selector, Randomize action,
+  MapMaker slider fallback, terrain preview, and physical-geography toggle.
+- [x] Generate a clean unnamed world by default: no premade realms, names,
+  settlements, routes, notes, or session records.
+- [x] Keep established campaign content as an explicit optional regeneration
+  mode; clean generation is previewed, cancellable, and undoable.
+- [x] Separate coastline, elevation, mountains, rivers, lakes, biomes, and
+  political territory layers while preserving protected manual edits.
+- [x] Add saved campaign sessions with dates, notes, Dutch/English transcripts,
+  starting locations, visited places, discoveries, export/import, and Undo/Redo.
+- [x] Add the first reviewed discovery workflow and source provenance. This is
+  retained as a fallback/manual mode, but it is no longer the intended primary
+  transcript workflow.
+- [x] Add direct world-level towns and villages so a campaign does not need to
+  invent a realm before placing its first discovered settlement.
+- [x] Add generation/session persistence validation and automated coverage for
+  deterministic generation, clean-world replacement, saved sessions, review
+  state, malformed input, and undo safety.
+
+The current automated suite passes with 145 tests and 0 failures. Browser/manual
+verification remains a separate task because the local browser test surface is
+currently unavailable in this environment.
+
+
 1. Generate a large landmass first
 ----------------------------------
 
@@ -610,43 +642,57 @@ Implemented in the current working tree:
   regeneration.
 - Added tests for the new layers, geography, editor operations, validation,
   migration, preservation rules, deterministic generation, and settlement
-  regeneration. The current test suite passes: 98 tests, 0 failures.
+  regeneration. The current test suite passes: 145 tests, 0 failures.
 
-Still to be done:
+Next work
+---------
 
-- Expose the natural-geography generator as a complete user-facing workflow in
-  the world-generation UI. The generation code and merge rules exist, but the
-  current public world-generation workflow intentionally applies land first and
-  does not yet expose full elevation/climate/river/mountain generation as a
-  normal step.
-- Finish richer natural-geography editing: direct editing of rivers, lakes,
-  mountain regions, elevation, climate, and rainfall is not yet a complete
-  editor comparable to the biome and territory editors.
-- Make settlement generation use the sampled environment more deeply. The
-  context is available, but architecture, resources, vegetation, settlement
-  density, clearance masks, and edge blending still need broader biome-specific
-  behavior.
-- Implement narrative layout briefs for villages: parse descriptions into
-  arrival directions, zones, landmarks, relationships, importance levels, and
-  decorative details, then preview and approve the resulting deterministic
-  layout.
-- Implement reviewed transcript/session suggestions. Session text must be
-  converted into explicit suggestions, shown as a diff/preview, individually or
-  batch-approved, and saved with source provenance. No automatic transcript
-  rewriting should be added.
-- Add the postponed individual house-movement tool and optional settlement
+- [ ] Replace the checklist-style transcript review with an optional local AI
+  map assistant. The assistant should read a complete long session in chunks,
+  retain a structured campaign memory, and use MapMaker tools to make coherent
+  map edits rather than asking the user to approve every extracted item.
+- [ ] Add a local-only companion service that loads the model only while the
+  user is editing or processing a map, then unloads it after an idle timeout or
+  when the editor closes. The editor must continue working without the service.
+- [ ] Start with the user's RTX 3070 Ti and 64 GB DDR4 machine. Benchmark a
+  compact quantized model first, then choose the best local model for Dutch and
+  English narrative extraction, tool calling, and structured JSON output.
+- [ ] Give the assistant safe map tools: create or rename a place, create a
+  forest/biome region, position a place inside or near that region, create
+  routes and events, resize or move existing geometry, and attach the source
+  session to every change.
+- [ ] Make a single processing run undoable as one session change. Show the
+  resulting map and a concise change summary for an overall sanity check rather
+  than a long list of individual approvals. Keep a correction chat available
+  for requests such as “make the Forest of Ghaja smaller” or “move Hidden Frog
+  Village toward its northern edge.”
+- [ ] Let the assistant ask short clarification questions only when an
+  unresolved choice materially changes the map, for example when the transcript
+  gives a name but no usable location or when two places could match.
+- [ ] Use this example as the first end-to-end acceptance test: “We came into a
+  village called Hidden Frog Village in a massive forest called the Forest of
+  Ghaja.” The assistant should create the named village, create a large forest,
+  place the village inside it, preserve the source text, and allow natural
+  size/position corrections afterward.
+- [ ] Finish richer direct editing of rivers, lakes, mountain regions,
+  elevation, climate, and rainfall.
+- [ ] Make settlement generation use sampled environment data more deeply,
+  including architecture, resources, vegetation, density, clearance masks, and
+  edge blending.
+- [ ] Implement narrative village layout briefs for arrival directions, zones,
+  landmarks, relationships, importance, and decorative details.
+- [ ] Add the postponed individual house-movement tool and optional settlement
   reflow while preserving house identity, rooms, notes, events, roads, and
   plots.
-- Improve visual blending and polish at biome boundaries, including more
+- [ ] Improve visual blending and polish at biome boundaries, including
   environment-specific vegetation, snow, desert, mountain, river, and wetland
   decoration.
-- Add broader browser/manual QA for the editor interactions, accessibility,
-  responsive layouts, performance on very large maps, and exported/imported
-  atlas compatibility beyond the automated test coverage.
+- [ ] Complete broader browser/manual QA for editor interactions,
+  accessibility, responsive layouts, very large maps, and exported/imported
+  atlas compatibility.
 
-The current milestone therefore covers the core land-first architecture,
-layer separation, deterministic generation, editable biomes and territories,
-preview/undo safety, and preservation of campaign content. The next major
-milestones are the user-facing natural-geography workflow, richer
-environment-aware settlements, narrative village briefs, reviewed transcript
-suggestions, and finally house movement/reflow.
+The completed milestone covers the land-first architecture, Azgaar-backed
+terrain, layer separation, deterministic generation, clean-world creation,
+campaign sessions, reviewed fallback suggestions, preview/Undo safety, and
+preservation of campaign content. The next major milestone is the local AI map
+assistant, followed by richer geography editing and settlement behavior.
